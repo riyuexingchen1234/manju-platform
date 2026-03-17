@@ -1,0 +1,15 @@
+# IDEA 项目文件
+.idea/
+*.iml
+target/
+
+# 配置文件（包含密码，不能提交）
+application.properties
+application-*.properties
+!application-sample.properties
+
+# 日志文件
+*.log
+
+# 系统文件
+.DS_Store
