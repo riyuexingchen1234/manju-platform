@@ -39,12 +39,13 @@ public class UserDao {
             user.setPoints(rs.getInt("points"));
             // 注意：数据库字段是create_time，对应实体类的createTime
             user.setCreateTime(rs.getObject("create_time", LocalDateTime.class));
+            user.setVersion(rs.getInt("version"));
             return user;
         }
     };
 
     public User findById(int userId) {
-        String sql = "SELECT id, username, password, points, create_time FROM user WHERE id = ?";
+        String sql = "SELECT id, username, password, points, create_time, version FROM user WHERE id = ?";
         try {
             return jdbcTemplate.queryForObject(sql, userRowMapper, userId);
         } catch (Exception e) {
@@ -58,7 +59,7 @@ public class UserDao {
             System.out.println("findByUsername:username is null or empty");
             return null;
         }
-        String sql = "SELECT id, username, password,points,create_time FROM user WHERE username = ?";
+        String sql = "SELECT id, username, password,points,create_time, version FROM user WHERE username = ?";
         System.out.println("findByUsername: executing query for username = [" + username + "]");
         try {
             User user = jdbcTemplate.queryForObject(sql, userRowMapper, username);
@@ -76,6 +77,14 @@ public class UserDao {
         int rows = jdbcTemplate.update(sql, newPoints, userId);
         return rows > 0;
     }
+
+    public boolean updatePointsWithVersion(int userId, int newPoints, int currentVersion) {
+        String sql = "UPDATE user SET points = ?, version = version + 1 WHERE id = ? AND version = ?";
+        int rows = jdbcTemplate.update(sql, newPoints, userId, currentVersion);
+        return rows > 0;
+    }
+
+
 }
 
 

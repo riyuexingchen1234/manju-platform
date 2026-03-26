@@ -3,6 +3,7 @@ package com.manju.platform.controller;
 import com.manju.platform.common.Result;
 import com.manju.platform.dao.UserDao;
 import com.manju.platform.entity.User;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,10 +18,15 @@ public class UserController {
 
     // 登录接口（简化版，根据用户名和密码验证）
     @PostMapping("/login")      // @PostMapping:对应POST请求,@RequestParam：从请求参数中取值。
-    public Result login(@RequestParam String username, @RequestParam String password) {
+    public Result login(@RequestParam String username, @RequestParam String password, HttpSession session) {
         System.out.println("收到登陆请求：username=" + username + "，password=" + password);
         User user = userDao.findByUsername(username);
         if (user != null && user.getPassword().equals(password)) {
+            // 存入 Session
+            session.setAttribute("userId",user.getId());
+            session.setAttribute("user",user);
+            // 清除试用记录（登录后不再需要）
+            session.removeAttribute("trialMap");
             return Result.success("登陆成功", user);
         }
         return Result.fail("用户名或密码错误");
