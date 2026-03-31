@@ -71,19 +71,35 @@ public class UserDao {
             return null;
         }
     }
-
+    // 无锁更新积分
     public boolean updatePoints(int userId, int newPoints) {
         String sql = "UPDATE user SET points = ? WHERE id = ?";
         int rows = jdbcTemplate.update(sql, newPoints, userId);
         return rows > 0;
     }
 
+    /**
+     * 基于乐观锁更新用户积分
+     * 作用：解决并发场景下多个请求同时更新同一用户积分导致的“积分丢失”问题
+     * 乐观锁原理：
+     * - 每次读取用户数据时，同时读取当前的版本号（version）
+     * - 更新时，在WHERE条件中带上版本号，只有数据库里的版本号与传入的一致时才更新
+     * - 更新成功后，版本号自动加1
+     * - 如果有其他线程先更新了数据，版本号会变化，当前更新就会失败（返回false）
+     *
+     * @param userId         要更新积分的用户ID
+     * @param newPoints      要设置的新积分值（计算后的最终积分，如：原积分 - 10）
+     * @param currentVersion 更新前读取到的当前版本号（用于乐观锁校验）
+     * @return true表示更新成功；false表示更新失败（版本号不匹配，存在并发冲突）
+     */
     public boolean updatePointsWithVersion(int userId, int newPoints, int currentVersion) {
         String sql = "UPDATE user SET points = ?, version = version + 1 WHERE id = ? AND version = ?";
         int rows = jdbcTemplate.update(sql, newPoints, userId, currentVersion);
+        // 判断更新是否成功：
+        // rows > 0 表示受影响行数大于0，即更新成功（版本号匹配）
+        // rows = 0 表示没有更新到数据，即版本号不匹配（有其他线程先更新了）
         return rows > 0;
     }
-
 
 }
 

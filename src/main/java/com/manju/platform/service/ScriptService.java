@@ -1,7 +1,6 @@
 package com.manju.platform.service;
 
 import com.manju.platform.common.Constants;
-import com.manju.platform.dto.SceneGenerateResponse;
 import com.manju.platform.dto.ScriptGenerateResponse;
 import com.manju.platform.entity.*;
 import com.manju.platform.dao.*;
@@ -80,24 +79,47 @@ public class ScriptService {
         response.setContent(aiResult);
         return response;
     }
-
+    /**
+     * 带重试机制的乐观锁积分扣减
+     * 作用：在乐观锁的基础上增加重试逻辑，解决乐观锁并发冲突时更新失败率高的问题
+     * 核心逻辑：
+     * - 每次尝试：先读取用户信息 → 校验积分 → 用乐观锁更新
+     * - 如果乐观锁更新失败（版本号不匹配），说明有其他线程先更新了，就重试一次
+     * - 直到更新成功或达到最大重试次数
+     *
+     * @param userId        要扣积分的用户ID
+     * @param pointsToDeduct 要扣除的积分数量（如：10）
+     * @param maxRetries    最大重试次数（如：3，表示最多尝试3次）
+     * @return 扣减成功后的新积分余额
+     * @throws RuntimeException 如果用户不存在、积分不足或重试次数用完仍失败
+     */
     private int deductPointsWithRetry(int userId, int pointsToDeduct, int maxRetries) {
-        int retry = maxRetries;
+        int retry = maxRetries;     // 初始化剩余重试次数
+        // while循环：只要还有重试次数，就继续尝试更新
         while (retry-- > 0) {
+            // 1. 先从数据库读取当前用户信息（同时拿到当前的version版本号）
             User user = userDao.findById(userId);
+            // 2. 校验用户是否存在
             if (user == null) {
                 throw new RuntimeException("用户不存在");
             }
+            // 3. 校验积分是否足够
             if (user.getPoints() < pointsToDeduct) {
                 throw new RuntimeException("积分不足");
             }
+            // 4. 计算扣减后的新积分
             int newPoints = user.getPoints() - pointsToDeduct;
+            // 5. 调用乐观锁方法更新积分（传入当前读取到的version版本号）
             boolean updated = userDao.updatePointsWithVersion(userId, newPoints, user.getVersion());
+            // 6. 判断更新是否成功
             if (updated) {
+                // 更新成功：直接返回新积分，结束方法
                 return newPoints;
             }
-            // 版本冲突，继续重试
+            // 7. 更新失败：说明版本号不匹配（有其他线程先更新了），继续下一次循环重试
+            // 这里不需要写代码，while循环会自动继续
         }
+        // 8. 重试次数用完仍未成功：抛出异常，提示用户稍后重试
         throw new RuntimeException("积分更新失败，请稍后重试");
     }
 }
