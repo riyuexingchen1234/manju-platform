@@ -8,6 +8,7 @@ import com.manju.platform.dto.SceneGenerateResponse;
 import com.manju.platform.entity.UsageLog;
 import com.manju.platform.entity.User;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,20 +30,29 @@ public class SceneService {
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
-        // 2. 检查今日是否已免费使用过工具
-        boolean freeUsed = logDao.isFreeUsedToday(req.getUserId(), Constants.TOOL_SCENE_GENERATE);
-        if (!freeUsed) {
-            // 免费使用：插入免费日志
-            UsageLog freeLog = new UsageLog();
-            freeLog.setUserId(req.getUserId());
-            freeLog.setToolName(Constants.TOOL_SCENE_GENERATE);
-            freeLog.setIsFree(1);
-            freeLog.setPointsDeduct(0);
-            freeLog.setCallStatus(1);
-            freeLog.setFailReason(null);
-            logDao.insert(freeLog);
-        } else {
-            // 付费使用：检查积分
+        // 先尝试插入免费日志，利用数据库唯一约束自动判断今日是否已免费“只有第一次插入能成功”
+        // 如果插入成功（返回 true），则走免费流程；
+        // 如果插入失败（返回 false，因为唯一冲突），则说明今日已经免费过了，走付费流程。
+        UsageLog freeLog = new UsageLog();
+        freeLog.setUserId(req.getUserId());
+        freeLog.setToolName(Constants.TOOL_SCENE_GENERATE);
+        freeLog.setIsFree(1);
+        freeLog.setPointsDeduct(0);
+        freeLog.setCallStatus(1);
+        freeLog.setFailReason(null);
+        boolean freeInserted =logDao.insert(freeLog);
+        if (freeInserted){
+            // 免费流程：调用 AI 生成图片（文生图，无参考图）
+            String imageUrl = aiService.generateImageFromMultimodal(
+                    req.getScenePrompt(),
+                    Collections.emptyList()
+            );
+            // 封装响应
+            SceneGenerateResponse response = new SceneGenerateResponse();
+            response.setImageUrl(imageUrl);
+            return response;
+        }else{
+            // 付费流程：检查积分
             if (user.getPoints() < Constants.POINTS_SCENE_GENERATE) {
                 // 积分不足，记录失败日志
                 UsageLog failLog = new UsageLog();
@@ -67,16 +77,16 @@ public class SceneService {
             successLog.setCallStatus(1);
             successLog.setFailReason(null);
             logDao.insert(successLog);
+            // 调用 AI 生成图片（文生图，无参考图）
+            String imageUrl = aiService.generateImageFromMultimodal(
+                    req.getScenePrompt(),
+                    Collections.emptyList()
+            );
+            // 封装响应
+            SceneGenerateResponse response = new SceneGenerateResponse();
+            response.setImageUrl(imageUrl);
+            return response;
         }
-        // 3. 调用 AI 生成图片（文生图，无参考图）
-        String imageUrl = aiService.generateImageFromMultimodal(
-                req.getScenePrompt(),
-                Collections.emptyList()
-        );
-        // 封装响应
-        SceneGenerateResponse response = new SceneGenerateResponse();
-        response.setImageUrl(imageUrl);
-        return response;
     }
 
     private int deductPointsWithRetry(int userId, int pointsToDeduct, int maxRetries) {

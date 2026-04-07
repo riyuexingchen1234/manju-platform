@@ -8,6 +8,7 @@ import com.manju.platform.dto.VideoGenerateResponse;
 import com.manju.platform.entity.UsageLog;
 import com.manju.platform.entity.User;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,20 +29,30 @@ public class VideoService {
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
-        // 2. 检查今日是否已免费使用
-        boolean freeUsed = logDao.isFreeUsedToday(req.getUserId(), Constants.TOOL_VIDEO_GENERATE);
-        if (!freeUsed) {
-            // 免费使用：插入免费日志，不扣积分
-            UsageLog freeLog = new UsageLog();
-            freeLog.setUserId(req.getUserId());
-            freeLog.setToolName(Constants.TOOL_VIDEO_GENERATE);
-            freeLog.setIsFree(1);
-            freeLog.setPointsDeduct(0);
-            freeLog.setCallStatus(1);
-            freeLog.setFailReason(null);
-            logDao.insert(freeLog);
-        } else {
-            // 付费使用：检查积分
+        // 先尝试插入免费日志，利用数据库唯一约束自动判断今日是否已免费“只有第一次插入能成功”
+        // 如果插入成功（返回 true），则走免费流程；
+        // 如果插入失败（返回 false，因为唯一冲突），则说明今日已经免费过了，走付费流程。
+        UsageLog freeLog = new UsageLog();
+        freeLog.setUserId(req.getUserId());
+        freeLog.setToolName(Constants.TOOL_VIDEO_GENERATE);
+        freeLog.setIsFree(1);
+        freeLog.setPointsDeduct(0);
+        freeLog.setCallStatus(1);
+        freeLog.setFailReason(null);
+        boolean freeInserted =logDao.insert(freeLog);
+        if (freeInserted){
+            // 免费流程：调用阿里云AI创建视频生成任务
+            Map<String, String> taskInfo = aiService.createVideoGenerationTask(
+                    req.getKeyframeImageUrl(),
+                    req.getDescription()
+            );
+            // 构建响应
+            VideoGenerateResponse response = new VideoGenerateResponse();
+            response.setTaskId(taskInfo.get("taskId"));
+            response.setStatus(taskInfo.get("status"));
+            return response;
+        }else {
+            // 付费流程：检查积分
             if (user.getPoints() < Constants.POINTS_VIDEO_GENERATE) {
                 UsageLog failLog = new UsageLog();
                 failLog.setUserId(req.getUserId());
@@ -65,19 +76,17 @@ public class VideoService {
             successLog.setCallStatus(1);
             successLog.setFailReason(null);
             logDao.insert(successLog);
+            // 调用阿里云AI创建视频生成任务
+            Map<String, String> taskInfo = aiService.createVideoGenerationTask(
+                    req.getKeyframeImageUrl(),
+                    req.getDescription()
+            );
+            // 构建响应
+            VideoGenerateResponse response = new VideoGenerateResponse();
+            response.setTaskId(taskInfo.get("taskId"));
+            response.setStatus(taskInfo.get("status"));
+            return response;
         }
-
-        // 3. 调用阿里云AI创建视频生成任务
-        Map<String, String> taskInfo = aiService.createVideoGenerationTask(
-                req.getKeyframeImageUrl(),
-                req.getDescription()
-        );
-
-        // 4. 构建响应
-        VideoGenerateResponse response = new VideoGenerateResponse();
-        response.setTaskId(taskInfo.get("taskId"));
-        response.setStatus(taskInfo.get("status"));
-        return response;
     }
 
     private int deductPointsWithRetry(int userId, int pointsToDeduct, int maxRetries) {

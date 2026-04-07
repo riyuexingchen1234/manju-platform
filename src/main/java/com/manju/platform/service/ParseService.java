@@ -7,6 +7,7 @@ import com.manju.platform.dto.ParseScriptResponse;
 import com.manju.platform.entity.UsageLog;
 import com.manju.platform.entity.User;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -34,19 +35,38 @@ public class ParseService {
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
-        // 2.检查今日是否已经免费使用
-        boolean freeUsed = logDao.isFreeUsedToday(userId, Constants.TOOL_PARSE_SCRIPT);
-        if (!freeUsed) {
-            // 免费使用：插入免费日志
-            UsageLog freeLog = new UsageLog();
-            freeLog.setUserId(userId);
-            freeLog.setToolName(Constants.TOOL_PARSE_SCRIPT);
-            freeLog.setIsFree(1);
-            freeLog.setPointsDeduct(0);
-            freeLog.setCallStatus(1);
-            freeLog.setFailReason(null);
-            logDao.insert(freeLog);
-        } else {
+        // 尝试插入免费日志（如果今日未免费过，插入成功；否则唯一冲突返回false）
+        UsageLog freeLog = new UsageLog();
+        freeLog.setUserId(userId);
+        freeLog.setToolName(Constants.TOOL_PARSE_SCRIPT);
+        freeLog.setIsFree(1);
+        freeLog.setPointsDeduct(0);
+        freeLog.setCallStatus(1);
+        freeLog.setFailReason(null);
+        boolean freeInserted = logDao.insert(freeLog);
+
+        if(freeInserted) {
+            // 免费成功，调用 AI 拆解剧本，获取原始 JSON 字符串
+            String rawJson = aiService.parseScript(userScript);
+            System.out.println("原始 rawJson: " + rawJson);  // 打印原始内容
+
+            // 提取第一个 '{' 到最后一个 '}' 之间的内容
+            int start = rawJson.indexOf('{');
+            int end = rawJson.lastIndexOf('}');
+            if (start >= 0 && end > start) {
+                String cleanedJson = rawJson.substring(start, end + 1);
+                System.out.println("清理后的 cleanedJson: " + cleanedJson);
+                try {
+                    return objectMapper.readValue(cleanedJson, ParseScriptResponse.class);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException("解析拆解剧本结果失败", e);
+                }
+            } else {
+                throw new RuntimeException("无法从AI响应中提取JSON");
+            }
+        }else{
+            // 今日已免费，走付费流程
             // 付费使用：检查积分
             if (user.getPoints() < Constants.POINTS_PARSE_SCRIPT) {
                 // 积分不足，记录失败日志
@@ -71,29 +91,28 @@ public class ParseService {
             successLog.setCallStatus(1);
             successLog.setFailReason(null);
             logDao.insert(successLog);
-        }
-        // 3. 调用 AI 拆解剧本，获取原始 JSON 字符串
-        String rawJson = aiService.parseScript(userScript);
-        System.out.println("原始 rawJson: " + rawJson);  // 打印原始内容
 
-        // 提取第一个 '{' 到最后一个 '}' 之间的内容
-        int start = rawJson.indexOf('{');
-        int end = rawJson.lastIndexOf('}');
-        if (start >= 0 && end > start) {
-            String cleanedJson = rawJson.substring(start, end + 1);
-            System.out.println("清理后的 cleanedJson: " + cleanedJson);
-            try {
-                return objectMapper.readValue(cleanedJson, ParseScriptResponse.class);
-            } catch (Exception e) {
-                e.printStackTrace();
-                throw new RuntimeException("解析拆解剧本结果失败", e);
+            // 付费成功，调用 AI 拆解剧本，获取原始 JSON 字符串
+            String rawJson = aiService.parseScript(userScript);
+            System.out.println("原始 rawJson: " + rawJson);  // 打印原始内容
+
+            // 提取第一个 '{' 到最后一个 '}' 之间的内容
+            int start = rawJson.indexOf('{');
+            int end = rawJson.lastIndexOf('}');
+            if (start >= 0 && end > start) {
+                String cleanedJson = rawJson.substring(start, end + 1);
+                System.out.println("清理后的 cleanedJson: " + cleanedJson);
+                try {
+                    return objectMapper.readValue(cleanedJson, ParseScriptResponse.class);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException("解析拆解剧本结果失败", e);
+                }
+            } else {
+                throw new RuntimeException("无法从AI响应中提取JSON");
             }
-        } else {
-            throw new RuntimeException("无法从AI响应中提取JSON");
         }
     }
-    //  去掉rawJson中可能的json和markdown标记
-
 
     private int deductPointsWithRetry(int userId, int pointsToDeduct, int maxRetries) {
         int retry = maxRetries;
@@ -114,5 +133,4 @@ public class ParseService {
         }
         throw new RuntimeException("积分更新失败，请稍后重试");
     }
-
 }
