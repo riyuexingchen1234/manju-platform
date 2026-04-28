@@ -5,7 +5,6 @@ import lombok.Data;
 
 @Data
 public class KeyframeGenerateRequest {
-    private Integer userId;
     private String storyboardDescription;   // 分镜描述
     private String characterImageUrl;       // 角色图URL
     private String sceneImageUrl;           // 场景图URL

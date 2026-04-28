@@ -37,16 +37,21 @@ public class SceneController {
                 return Result.fail("您已试用过场景生成，请登录后使用");
             }
             trialMap.put("scene_generate", true);
+            session.setAttribute("trialMap",trialMap);
 
             // 调用真实 AI（不扣积分、不记录日志）
-            String imageUrl = aiService.generateImageFromMultimodal(request.getScenePrompt(), Collections.emptyList());
+            String imageUrl = aiService.generateImageFromMultimodal(
+                    request.getScenePrompt(),
+                    Collections.emptyList()
+            );
+            // 封装响应
             SceneGenerateResponse response = new SceneGenerateResponse();
             response.setImageUrl(imageUrl);
             return Result.success("试用成功", response);
 
         }
         // 3. 已登录用户正常调用 Service
-        SceneGenerateResponse response = sceneService.generateScene(request);
+        SceneGenerateResponse response = sceneService.generateScene(userId,request);
         return Result.success("场景生成成功", response);
     }
 }

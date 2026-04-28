@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,6 +18,7 @@ import java.util.Map;
 public class CharacterController {
     @Autowired
     private CharacterService characterService;
+    @Autowired
     private AIService aiService;
 
     @PostMapping("/generate")
@@ -46,7 +46,7 @@ public class CharacterController {
             return Result.success("试用成功", imageUrl);
         }
         // 3. 已登录用户，正常调用 Service（会处理免费次数和积分）
-        CharacterGenerateResponse response = characterService.generateCharacter(request);
+        CharacterGenerateResponse response = characterService.generateCharacter(userId,request);
         return Result.success("角色生成成功", response);
     }
 

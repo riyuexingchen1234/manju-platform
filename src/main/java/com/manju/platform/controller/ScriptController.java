@@ -33,7 +33,7 @@ public class ScriptController {
         if (request.getMessages() != null && !request.getMessages().isEmpty()) {
             messages = request.getMessages();
         } else if (request.getPrompt() != null) {
-            // 兼容单轮（旧前端）
+            // 兼容单轮
             messages = new ArrayList<>();
             Map<String, String> userMsg = new HashMap<>();
             userMsg.put("role", "user");
@@ -58,13 +58,13 @@ public class ScriptController {
             trialMap.put("script_generate",true);
             session.setAttribute("trialMap",trialMap);
 
-            // 调用service
+            // 未登录试用直接调用 AI（不扣积分）
             String aiResult = aiService.generateScript(messages);
             return Result.success("试用成功",aiResult);
         }
 
 
-        // 3. 已登录用户，正常调用 Service
+        // 3. 已登录用户：正常调用 Service（积分、日志由 PaymentService 处理）
         ScriptGenerateResponse response = scriptService.generateScript(userId, messages);
         return Result.success("剧本生成成功", response);
 

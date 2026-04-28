@@ -51,17 +51,18 @@ public class KeyframeController {
                     request.getStoryboardDescription()
             );
             // 参考图列表：角色图、场景图
-            java.util.List<String> imageUrls = Arrays.asList(
+            List<String> imageUrls = Arrays.asList(
                     request.getCharacterImageUrl(),
                     request.getSceneImageUrl()
             );
             // 调用真实AI
             String imageUrl = aiService.generateImageFromMultimodal(prompt, imageUrls);
-            return Result.success("试用成功", imageUrl);
+            KeyframeGenerateResponse response = new KeyframeGenerateResponse();
+            return Result.success("试用成功", response);
         }
 
         // 3. 已登录用户，正常调用 Service（会扣积分、记日志）
-        KeyframeGenerateResponse response = keyframeService.generateKeyframe(request);
+        KeyframeGenerateResponse response = keyframeService.generateKeyframe(userId,request);
         return  Result.success("关键帧生成成功",response);
     }
 }

@@ -76,18 +76,22 @@ public class AIService {
     """;
     public String generateScript(List<Map<String, String>> messages) {
         if (testMode){
+            // 检查用户消息中是否包含 "#timeout" 字符串
+            for (Map<String,String>msg: messages){
+                if (msg.get("content") != null && msg.get("content").contains("#timeout")){
+                    // 模拟超时异常
+                    throw new RuntimeException("模拟AI调用超时，DeepSeek响应超时");
+                }
+            }
+            // 正常测试模式：模拟耗时后返回固定内容
             try {
-                //  模拟耗时
                 Thread.sleep(50);
             }catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
             return "模拟剧本生成测试";
         }
-//        // 测试用：如果 prompt 包含 "#失败测试"，则模拟超时
-//        if (prompt.contains("#失败测试")){
-//            throw new RuntimeException("模拟AI调用超时");
-//        }
+
         // 1. 构建消息列表
         List<Map<String, Object>> fullMessages = new ArrayList<>();
         // 添加系统指令
@@ -205,6 +209,7 @@ public class AIService {
         Map<String,Object> requestBody = new HashMap<>();
         requestBody.put("model", "deepseek-chat");
         requestBody.put("messages", fullMessages);
+        requestBody.put("max_tokens",8192); // DeepSeek 支持的最大值
 
         // 3. 设置请求头
         HttpHeaders headers = new HttpHeaders();

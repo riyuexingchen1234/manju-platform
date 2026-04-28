@@ -51,7 +51,11 @@ public class ParseController {
 
             // 将 JSON 字符串解析为 ParseScriptResponse 对象
             try {
-                ParseScriptResponse response = objectMapper.readValue(rawJson, ParseScriptResponse.class);
+                // 提取 JSON（清理 Markdown 代码块）
+                int start = rawJson.indexOf('{');
+                int end = rawJson.lastIndexOf('}');
+                String cleanedJson = rawJson.substring(start, end + 1);
+                ParseScriptResponse response = objectMapper.readValue(cleanedJson, ParseScriptResponse.class);
                 return Result.success("试用成功", response);
             } catch (Exception e) {
                 e.printStackTrace();

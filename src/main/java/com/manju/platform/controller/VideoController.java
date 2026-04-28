@@ -50,8 +50,8 @@ public class VideoController {
         }
 
         // 已登录用户，正常调用 Service（会扣积分、记日志）
-        VideoGenerateResponse videoUrl = videoService.generateVideo(request);
-        return Result.success("视频生成成功", videoUrl);
+        VideoGenerateResponse response = videoService.generateVideo(userId,request);
+        return Result.success("视频生成成功", response);
     }
 
     // 查询任务结果（与登录状态无关，仅需 taskId）

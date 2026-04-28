@@ -66,4 +66,11 @@ public class UserController {
         return Result.success("查询成功", user.getPoints());
     }
 
+    // 登出接口
+    @PostMapping("/logout")
+    public Result logout(HttpSession session){
+        session.invalidate();
+        return Result.success("退出登录成功");
+    }
+
 }
