@@ -10,8 +10,6 @@ import com.manju.platform.service.GuestTrialService;
 import com.manju.platform.service.HistoryService;
 import com.manju.platform.service.ParseScriptService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,7 +18,6 @@ import jakarta.servlet.http.HttpSession;
 @RestController
 @RequestMapping("/api/script")
 public class ParseScriptController {
-    private static final Logger logger = LoggerFactory.getLogger(ParseScriptController.class);
 
     @Autowired
     private ParseScriptService parseScriptService;

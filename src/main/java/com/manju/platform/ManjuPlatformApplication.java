@@ -5,12 +5,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @SpringBootApplication
 public class ManjuPlatformApplication {
-    private static final Logger logger = LoggerFactory.getLogger(ManjuPlatformApplication.class);
 
     /**
      * 密码加密器：供用户注册、登录时加密/校验密码
