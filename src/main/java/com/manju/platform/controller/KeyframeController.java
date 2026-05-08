@@ -1,20 +1,19 @@
 package com.manju.platform.controller;
 
-
+import com.manju.platform.common.Constants;
 import com.manju.platform.common.Result;
 import com.manju.platform.dto.KeyframeGenerateRequest;
 import com.manju.platform.dto.KeyframeGenerateResponse;
 import com.manju.platform.service.AIService;
+import com.manju.platform.service.GuestTrialService;
+import com.manju.platform.service.HistoryService;
 import com.manju.platform.service.KeyframeService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/keyframe")
@@ -23,46 +22,79 @@ public class KeyframeController {
     private KeyframeService keyframeService;
     @Autowired
     private AIService aiService;
+    @Autowired
+    private HistoryService historyService;
+    @Autowired
+    private GuestTrialService guestTrialService;
+
+    // 提取分镜描述前50字作为 input_preview
+    private String extractInputPreview(String description) {
+        if (description != null) {
+            return description.length() > 50 ? description.substring(0, 50) + "..." : description;
+        }
+        return "";
+    }
 
     @PostMapping("/generate")
-    public Result generateKeyframe(@RequestBody KeyframeGenerateRequest request, HttpSession session){
-        // 1. 从 Session 中获取用户ID
+    public Result generateKeyframe(@RequestBody KeyframeGenerateRequest request, HttpSession session) {
         Integer userId = (Integer) session.getAttribute("userId");
 
-        // 2. 未登录用户试用处理
+        // 未登录用户试用
         if (userId == null) {
-            // 获取或创建试用记录 Map
-            Map<String, Boolean> trialMap = (Map<String, Boolean>) session.getAttribute("trialMap");
-            if (trialMap == null) {
-                trialMap = new HashMap<>();
-            }
-            // 检查是否已试用过关键帧生成
-            if (trialMap.containsKey("keyframe_generate")) {
-                return Result.fail("您已试用过关键帧生成，请登录后使用");
-            }
-            // 记录试用
-            trialMap.put("keyframe_generate", true);
-            session.setAttribute("trialMap", trialMap);
+            KeyframeGenerateResponse response = guestTrialService.execute(session,
+                    Constants.TOOL_KEYFRAME_GENERATE, Constants.DISPLAY_KEYFRAME_GENERATE,
+                    () -> {
+                        // 构建 imageUrls：先放所有角色图，再放场景图
+                        List<String> imageUrls = new ArrayList<>();
+                        if (request.getCharacterImageUrls() != null) {
+                            imageUrls.addAll(request.getCharacterImageUrls());
+                        }
+                        if (request.getSceneImageUrl() != null) {
+                            imageUrls.add(request.getSceneImageUrl());
+                        }
 
-            // 构造融合提示词
-            String prompt = String.format(
-                    "使用第一张图作为角色形象，第二张图作为背景场景。请将角色自然地融入场景中，执行动作：%s。" +
-                            "保持角色和场景的真实性，生成一张融合后的新图片。",
-                    request.getStoryboardDescription()
-            );
-            // 参考图列表：角色图、场景图
-            List<String> imageUrls = Arrays.asList(
-                    request.getCharacterImageUrl(),
-                    request.getSceneImageUrl()
-            );
-            // 调用真实AI
-            String imageUrl = aiService.generateImageFromMultimodal(prompt, imageUrls);
-            KeyframeGenerateResponse response = new KeyframeGenerateResponse();
+                        // 构建 prompt
+                        int charCount = request.getCharacterImageUrls() != null ? request.getCharacterImageUrls().size() : 0;
+                        String prompt;
+                        if (charCount == 0) {
+                            // 无角色图时，只用场景图
+                            prompt = String.format(
+                                    "请根据以下场景参考图生成关键帧图片：%s。%s",
+                                    request.getSceneImageUrl() != null ? "图1是场景背景参考图" : "",
+                                    request.getStoryboardDescription()
+                            );
+                        } else if (charCount == 1) {
+                            // 单角色
+                            prompt = String.format(
+                                    "请根据以下参考图和描述生成关键帧图片。图1是角色形象参考图，图2是场景背景参考图。请将角色自然地融入场景中，%s",
+                                    request.getStoryboardDescription()
+                            );
+                        } else {
+                            // 多角色
+                            prompt = String.format(
+                                    "请根据以下参考图和描述生成关键帧图片。图1到图%d是角色形象参考图，图%d是场景背景参考图。请将角色自然地融入场景中，%s",
+                                    charCount,
+                                    charCount + 1,
+                                    request.getStoryboardDescription()
+                            );
+                        }
+
+                        String imageUrl = aiService.generateImage(prompt, imageUrls);
+                        KeyframeGenerateResponse resp = new KeyframeGenerateResponse();
+                        resp.setImageUrl(imageUrl);
+                        return resp;
+                    });
+            historyService.save(null, session, Constants.TOOL_KEYFRAME_GENERATE,
+                    extractInputPreview(request.getStoryboardDescription()),
+                    "image_url", null, response.getImageUrl(), "success", null);
             return Result.success("试用成功", response);
         }
 
-        // 3. 已登录用户，正常调用 Service（会扣积分、记日志）
-        KeyframeGenerateResponse response = keyframeService.generateKeyframe(userId,request);
-        return  Result.success("关键帧生成成功",response);
+        // 已登录用户
+        KeyframeGenerateResponse response = keyframeService.generateKeyframe(userId, request);
+        historyService.save(userId, session, Constants.TOOL_KEYFRAME_GENERATE,
+                extractInputPreview(request.getStoryboardDescription()),
+                "image_url", null, response.getImageUrl(), "success", null);
+        return Result.success("关键帧生成成功", response);
     }
 }

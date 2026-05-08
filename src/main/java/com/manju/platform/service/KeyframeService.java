@@ -1,14 +1,12 @@
 package com.manju.platform.service;
 
-
 import com.manju.platform.common.Constants;
 import com.manju.platform.dto.KeyframeGenerateRequest;
 import com.manju.platform.dto.KeyframeGenerateResponse;
-import com.manju.platform.functional.AICallable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -18,29 +16,52 @@ public class KeyframeService {
     @Autowired
     private AIService aiService;
 
-    public KeyframeGenerateResponse generateKeyframe(int userId,KeyframeGenerateRequest req){
-        Object result = paymentService.processPayment(
+    public KeyframeGenerateResponse generateKeyframe(int userId, KeyframeGenerateRequest req) {
+        return paymentService.processPayment(
                 userId,
                 Constants.TOOL_KEYFRAME_GENERATE,
                 Constants.POINTS_KEYFRAME_GENERATE,
-                () ->{
-                    // 构造融合提示词（将分镜描述嵌入）
-                    String prompt = String.format(
-                            "使用第一张图作为角色形象，第二张图作为背景场景。请将角色自然地融入场景中，执行动作：%s。保持角色和场景的真实性，生成一张融合后的新图片。",
-                            req.getStoryboardDescription()
-                    );
+                () -> {
+                    // 构建 imageUrls：先放所有角色图，再放场景图
+                    List<String> imageUrls = new ArrayList<>();
+                    if (req.getCharacterImageUrls() != null) {
+                        imageUrls.addAll(req.getCharacterImageUrls());
+                    }
+                    if (req.getSceneImageUrl() != null) {
+                        imageUrls.add(req.getSceneImageUrl());
+                    }
 
-                    // 参考图列表：角色图、场景图
-                    List<String> imageUrls = Arrays.asList(req.getCharacterImageUrl(), req.getSceneImageUrl());
+                    // 构建 prompt
+                    int charCount = req.getCharacterImageUrls() != null ? req.getCharacterImageUrls().size() : 0;
+                    String prompt;
+                    if (charCount == 0) {
+                        // 无角色图时，只用场景图
+                        prompt = String.format(
+                                "请根据以下场景参考图生成关键帧图片：%s。%s",
+                                req.getSceneImageUrl() != null ? "图1是场景背景参考图" : "",
+                                req.getStoryboardDescription()
+                        );
+                    } else if (charCount == 1) {
+                        // 单角色
+                        prompt = String.format(
+                                "请根据以下参考图和描述生成关键帧图片。图1是角色形象参考图，图2是场景背景参考图。请将角色自然地融入场景中，%s",
+                                req.getStoryboardDescription()
+                        );
+                    } else {
+                        // 多角色
+                        prompt = String.format(
+                                "请根据以下参考图和描述生成关键帧图片。图1到图%d是角色形象参考图，图%d是场景背景参考图。请将角色自然地融入场景中，%s",
+                                charCount,
+                                charCount + 1,
+                                req.getStoryboardDescription()
+                        );
+                    }
 
-                    // 调用 AI 生成关键帧图
-                    String imageUrl = aiService.generateImageFromMultimodal(prompt, imageUrls);
-                    // 封装响应
+                    String imageUrl = aiService.generateImage(prompt, imageUrls);
                     KeyframeGenerateResponse response = new KeyframeGenerateResponse();
                     response.setImageUrl(imageUrl);
                     return response;
                 }
         );
-        return (KeyframeGenerateResponse) result;
     }
 }

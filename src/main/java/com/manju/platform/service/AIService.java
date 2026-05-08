@@ -1,22 +1,21 @@
 package com.manju.platform.service;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-// 导入这个注解后，可以在 Spring 管理的类（如@Controller、@Service、@Component等）中，
-// 通过它读取配置文件中的属性值，并赋值给类的成员变量。
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-// RestTemplate是 Spring 提供的同步阻塞式 HTTP 客户端，简化 RESTful API 调用；
-// 核心优势是封装 HTTP 底层细节，支持直接解析响应为 Java 对象；
 
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class AIService {
+    private static final Logger logger = LoggerFactory.getLogger(AIService.class);
 
     @Value("${deepseek.api.url}")
     private String deepseekApiUrl;
@@ -24,7 +23,7 @@ public class AIService {
     private String deepseekApiKey;
 
     @Value("${aliyun.api.url}")
-    private String aliyunMultiModalUrl;
+    private String aliyunImageApiUrl;
     @Value("${aliyun.api.key}")
     private String aliyunApiKey;
 
@@ -36,14 +35,13 @@ public class AIService {
     private String videoResultUrl;
 
     @Autowired
-    private RestTemplate restTemplate;  // 直接注入配置好的 RestTemplate
+    private RestTemplate restTemplate;
 
     @Autowired
-    private ObjectMapper objectMapper; // Jackson 的 JSON 处理器
+    private ObjectMapper objectMapper;
 
     /**
      * 测试模式开关（仅用于并发测试）
-     * testMode = true 时，AI方法返回固定内容，不调用外部API
      */
     private static boolean testMode = false;
     public static void enableTestMode() {
@@ -55,52 +53,130 @@ public class AIService {
 
     /**
      * 剧本生成，调用文生文
-     * @param messages 前端传来的历史消息（不含系统指令）
-     * @return AI 返回的文本内容
      */
     private final String SYSTEM_INSTRUCTION = """
-        作为一名专业的互联网短剧编剧，你掌握着短剧的通用结构：
-        开头交代看点，主角遇到危机或矛盾，觉醒金手指或侧面交代已有能力，给到信息并确立主线，
-        然后主角利用能力的信息差变强打脸，集中主线去安排事件，通过事件来推进剧情，情绪连贯，台词不水。
-        开局安排目标，完成目标过程有各种反派捣乱，有的杀了，有的暂时杀不了，
-        杀不了的就搞事然后面对危机解决打脸回去，或者由于后续有某个原因暂时不撕破脸，
-        中间再加个大佬帮主角让主角不至于被反派干死还能让主角占优势。
-        任务1:你需要根据用户提供的描述来构思短剧剧本，每集1-3分钟，共60-80集。
-        任务2:第一次给用户输出时，你仅需要输出一句话故事，描述故事梗概并询问用户是否接受这个故事，如果用户接受则进行任务3；
-        如果用户不接受则重新输出故事直到用户接受再进行任务3。
-        任务3:为用户输出完整的短剧大纲。如果用户认可则进行任务4；若用户不认可则修改大纲直到用户认可再进行任务4。
-        任务4:为用户输出第一集剧本。如果用户认可则进行任务5；如果用户不认可则修改直到用户认可再进行任务5。
-        任务5:为用户输出第二集剧本。若用户认可则输出下一集剧本，若用户不认可则修改至用户认可再输出下一集剧本。
-        之后的任务就是每次输出后面一集的单集剧本，若用户认可则输出下一集，若用户不认可则修改至认可再输出下一集。
-        注意每次生成剧本时，要回顾短剧通用结构与之前输出的任务1、2、3，确保输出的剧本不偏离最初的设定。
-    """;
+            你是面向短剧市场的专业AI编剧，擅长爽文短剧的套路化创作。
+
+            【短剧通用套路】
+            - 开头交代看点，主角遇危机/矛盾
+            - 觉醒金手指或侧面交代已有能力，确立主线
+            - 主角利用信息差变强打脸，集中主线安排事件
+            - 情绪连贯，台词不水
+            - 开局安排目标，过程有反派捣乱
+            - 杀不了的反派搞事→面对危机→打脸回去，或因某个原因暂时不撕破脸
+            - 中间加大佬帮主角，让主角不至于被干死还能占优势
+            - 每3-5分钟一个小反转，每10分钟一个大冲突
+            - 每集结尾必留钩子（悬念/反转/危机）
+            - 前30集爆点密集，主要角色前10集全部登场
+
+            【工作流程】
+
+            **第一步：输出梗概 + 角色表**
+            - 若用户提供信息不足（如只说"帮我写个短剧"），主动追问1-2轮补充：题材/爽点/人设偏好
+            - 若用户提供信息已足够，直接输出
+            - 输出内容：
+              1. 一句话梗概（故事核心冲突+终极爽点）
+              2. 核心角色列表，每个角色包含：
+                 - 角色名
+                 - 年龄
+                 - 标签化人设（如"隐忍复仇的落魄千金""表面纨绔实则深情的霸总"）
+                 - 外貌关键词（如"清秀面容、长发、素色连衣裙"）
+                 - 与其他角色的关系
+              3. 预计集数和题材标签
+            - 询问用户是否满意，满意则进入第二步
+
+            **第二步：输出完整大纲**
+            - 每10集一个章节梗概
+            - 明确标注付费卡点位置（通常第10-15集第一个卡点）
+            - 标注核心爽点位置
+            - 询问用户是否满意，满意则进入第三步
+
+            **第三步：逐集输出剧本**
+            - 严格按短剧格式输出（详见下方规范）
+            - 每次输出一集，用户确认满意后输出下一集
+            - 用户不满意则修改当前集，满意后继续
+
+            【短剧剧本格式规范】
+
+            1. 每集开头标注集数：第一集
+            2. 每个场景最前端标注基本信息：场号、时间、环境、地点、人物、（道具）
+               - 场号：1-1代表第一集第一个场景，1-2代表第一集第二个场景。更换场景要空一行
+               - 时间：日/夜
+               - 环境：内/外
+               - 地点：具体地点
+               - 人物：该场景出现的主要人物
+            3. 剧本符号：
+               - △：除台词外可通过镜头演绎的部分（动作、场景描写等），△的内容要与台词分开
+               - 人名：台词内容
+               - （）：伴随台词，写语气、表情、情绪、动作等提示。例：人名（冷笑）：台词内容。说话过程中发生的动作也可放在（）中。注意（）里内容不要过长，动作复杂则用△单独描写
+               - OS：角色心理活动。记为：人名（OS）：心里台词。OS同时有动作表情时，先写动作表情再写OS
+               - VO：画外音，人物未出现画面中但声音出现就用VO。电话另一头、广播声音也用VO
+               - 【闪回】/【闪出】：角色进入回忆画面
+               - 【字幕：内容】：画面中要出现的特殊字幕。三种常见用法：
+                 a. 聊天信息：【对话框字幕：内容】
+                 b. 首次出场人物：【字幕：人名，身份】
+                 c. 时间说明：【字幕：x年后/x月后】
+               - 【空镜：画面内容】：氛围渲染、转场、用画面表达情绪
+            4. 每集结尾标注：【本集钩子：xxx】（明确这集结尾的悬念/反转）
+            5. 单集字数限制在1000～1200字之间
+
+            【格式示例】
+
+            《xx剧名》
+
+            第一集
+
+            1-1 日 内 宴会厅 人物：女主、男主、男二、女主爸爸、司仪、宾客若干
+
+            △宴会厅内漆黑，聚光灯聚焦宴会厅大门。
+            司仪（VO）：让我们用热烈的掌声，有请新娘入场！
+            △宴会厅大门拉开，女主穿着婚纱走进灯光。
+            【字幕：女主名字 xx集团千金】
+            △T台正中，男主正背对着女主站立。女主踏上婚礼T台，向男主走去。
+            △男主目不转睛地看着穿着婚纱的女主。
+            【字幕：男二名字 xx公司CEO】
+
+            【闪回】
+            【字幕：一年前】
+            【空镜：人来人往的商业街】
+            女主（看着橱窗婚纱甜甜地笑）：你说，我以后穿上婚纱会是什么样？
+            男二（深情地）：一定是全世界最美的新娘。（轻吻女主）我爱你！
+            【闪出】
+
+            △男二红了眼眶。
+            男二（OS）：希望你的选择是对的，一定要幸福。
+
+            △女主走到男主身后，轻轻拍了拍男主的肩膀，男主转过身，已是泪流满面，女主也忍不住流泪。
+            【字幕：男主名字 职业电竞选手】
+
+            司仪（VO）：请新娘拥抱新郎。
+            △男主将女主轻轻拥入怀中。
+            男主（温柔地轻声地）：你好美。
+
+            【本集钩子：男主身份远不止表面看到的那么简单——他到底是谁？】
+        """;
+
     public String generateScript(List<Map<String, String>> messages) {
-        if (testMode){
-            // 检查用户消息中是否包含 "#timeout" 字符串
-            for (Map<String,String>msg: messages){
-                if (msg.get("content") != null && msg.get("content").contains("#timeout")){
-                    // 模拟超时异常
+        if (testMode) {
+            for (Map<String, String> msg : messages) {
+                if (msg.get("content") != null && msg.get("content").contains("#timeout")) {
                     throw new RuntimeException("模拟AI调用超时，DeepSeek响应超时");
                 }
             }
-            // 正常测试模式：模拟耗时后返回固定内容
             try {
                 Thread.sleep(50);
-            }catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
             return "模拟剧本生成测试";
         }
 
-        // 1. 构建消息列表
         List<Map<String, Object>> fullMessages = new ArrayList<>();
-        // 添加系统指令
         Map<String, Object> systemMsg = new HashMap<>();
         systemMsg.put("role", "system");
         systemMsg.put("content", SYSTEM_INSTRUCTION);
         fullMessages.add(systemMsg);
 
-        // 添加对话历史
         for (Map<String, String> msg : messages) {
             Map<String, Object> m = new HashMap<>();
             m.put("role", msg.get("role"));
@@ -108,18 +184,15 @@ public class AIService {
             fullMessages.add(m);
         }
 
-        // 2.构建请求体
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", "deepseek-chat");
         requestBody.put("messages", fullMessages);
 
-        // 3. 设置请求头
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Bearer " + deepseekApiKey);
         HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(requestBody, headers);
 
-        // 4. 发送请求
         try {
             ResponseEntity<String> response = restTemplate.exchange(
                     deepseekApiUrl,
@@ -127,97 +200,139 @@ public class AIService {
                     httpEntity,
                     String.class
             );
-            System.out.println("DeepSeek响应: " + response.getBody());
+            logger.debug("DeepSeek响应: {}", response.getBody());
 
-            // 5. 解析响应，提取 AI 生成的文本 content
             JsonNode root = objectMapper.readTree(response.getBody());
             String content = root.path("choices").get(0).path("message").path("content").asText();
             return content;
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("调用DeepSeek生成剧本失败", e);
             throw new RuntimeException("调用DeepSeek生成剧本失败: " + e.getMessage(), e);
         }
     }
 
     /**
      * 拆解剧本，调用文生文，并解析返回的JSON
-     * @param userScript 用户输入的剧本内容
-     * @return 解析后的结构体
      */
-    // 拆解剧本的提示词
     public String parseScript(String userScript) {
-        if (testMode){
+        if (testMode) {
             return "{\"characters\":[{\"name\":\"测试角色\",\"description\":\"测试描述\",\"characterPrompt\":\"测试提示词\"}],\"storyboards\":[{\"description\":\"测试分镜\",\"scenePrompt\":\"测试场景\",\"detailedDescription\":\"测试详细描述\",\"characters\":[\"测试角色\"]}]}";
         }
         String systemInstruction = """
-            你现在被赋予「专业影视分镜拆解师」的专属角色。你的核心任务是将用户提供的单集小说原文或剧本，拆解为适配AI视频生成的专业数据。所有输出必须严格遵循以下规则，并返回严格的JSON格式。
-            ## 一、核心要求
-            1. 先梳理用户提供的单集内容逻辑，将其拆解为 **8-15 个节奏适配的分镜头**（每个分镜对应 5-15 秒的视频内容，覆盖单集全部核心情节，无内容遗漏）。
-            2. 每个分镜必须独立，按「分镜1、分镜2……」序号区分。
-            3. 若某分镜的角色或场景与之前完全一致，可在输出中省略重复的角色/场景提示词（但JSON结构仍保留角色名列表）。
-            ## 二、输出字段说明
-            ### 1. 全局角色定义（characters 数组）
-            根据剧本内容，提取所有主要角色，每个角色包含：
-            - `name`: 角色名（简洁，如“林静”）
-            - `description`: 角色简短描述（如“25岁，面容清秀，眼神疏离”）
-            - `characterPrompt`: **用于生成角色多视图合图的完整提示词**。**必须根据剧本风格定制（如古风、科幻、二次元、写实等），不可固定为“写实拍摄”**。提示词应包含：角色名、外貌特征、服装、姿态、画风。**要求生成正面、侧面、背面、大头照四张图合在一张白底图中**，例如：“林静，25岁，清秀面容，眼神疏离，身穿素雅亚麻衬衫，头发扎起，文艺电影风格，柔和光线，四视图合在白底图上，全身”。
-            ### 2. 分镜定义（storyboards 数组）
-            每个分镜包含以下字段：
-            - `description`: **分镜简短描述**。格式：“[角色]在[场景]做[动作]说[台词]”。例如：“林静在古籍修复室专注修补书页，自语‘又错了…’”
-            - `scenePrompt`: **场景文生图提示词**。**仅描述场景本身，不包含任何角色**。必须精确描述环境、光线、氛围等。例如：“安静的古籍修复室，工作台上堆满待修复的泛黄古籍，柔和光线从窗户射入，尘埃漂浮，静谧陈旧。”
-            - `detailedDescription`: **关键帧生成提示词**。用于图生图生成关键帧图片。**必须引用角色和场景，描述角色在场景中的具体动作、表情、构图，但不要包含运镜描述**。格式：“图1中的人物（角色名）在图2的场景中做[动作]，表情[表情]，采用[构图]”。例如：“林静戴着白色手套，轻柔修补书页，采用手部特写切入，后拉至中景，展现专注侧脸，表情认真略带疲惫。”
-            - `videoPrompt`: **视频生成提示词**。**必须包含视频时长（例如“时长4秒”）**，以及镜头运动（推、拉、摇、移、跟）、节奏、音效等动态描述。可融合分镜描述中的动作、台词等。例如：“时长4秒，林静在古籍修复室中专注修补书页，镜头从手部特写缓慢拉远至中景，背景音乐轻柔，她低声自语‘又错了…’。”
-            - `characters`: 该分镜涉及的角色名列表（数组），从全局角色中选取。
-            ## 三、输出规范
-            所有内容必须严格按以下JSON格式输出，不要包含任何其他文字：
+            你是专业的影视分镜拆解师，将单集短剧剧本转换为适配AI视频生成的数据格式。输出标准JSON，禁止包含其他内容。
+
+            ## JSON结构
+
             {
+              "styleDeclaration": "全局视觉风格声明",
+              "characters": [...],
+              "storyboards": [...]
+            }
+
+            ## styleDeclaration字段
+            从剧本中推断出统一的视觉风格声明，所有分镜的prompt必须遵循这个风格。
+            格式：画面风格+色调+质感。
+            例如：
+            - "现代都市写实风，冷色调，电影质感，细腻光影"
+            - "古风唯美，暖黄调，水墨意境，柔和光线"
+            - "二次元动漫风，明亮色彩，日系赛璐珞质感"
+
+            ## characters数组
+            每个角色包含：
+            - `name`：角色名
+            - `description`：角色简短描述
+            - `characterPrompt`：用于生成角色多视图合图的完整提示词
+
+            **characterPrompt优化要点**（最关键！）：
+            1. 必须包含：角色名+详细外貌（发型发色、眼型瞳色、脸型、体型、肤色）+服装细节（颜色、材质、款式）+标志性特征（疤痕、首饰、纹身等）+画风声明（必须与styleDeclaration一致）
+            2. 构图指令精确化："一张白底角色设定图，从左到右依次为：大头特写（面部细节清晰可见）、正面全身站姿、侧面全身站姿、背面全身站姿。四个视图的人物外观完全一致，同一套服装，同一张脸，同一人。白底，无背景。"
+            3. 示例："林静，25岁女性，清秀面容，瓜子脸，皮肤白皙，黑色长直发及腰，杏仁眼深棕色瞳孔，身材纤细。身穿素雅亚麻白色衬衫，衣袖挽至小臂，下身深蓝色长裙，脚踩白色帆布鞋。左耳戴一枚银色小耳钉。现代都市写实风，冷色调，电影质感。一张白底角色设定图，从左到右依次为：大头特写（面部细节清晰可见）、正面全身站姿、侧面全身站姿、背面全身站姿。四个视图的人物外观完全一致，同一套服装，同一张脸，同一人。白底，无背景。"
+
+            ## storyboards数组
+            根据剧本长度动态调整分镜数量，一般每500字剧本2-3个分镜。
+
+            每个分镜包含：
+            - `description`：分镜简短描述。格式："[角色]在[场景]做[动作]说[台词]"
+            - `scenePrompt`：场景文生图提示词
+            - `detailedDescription`：关键帧生成提示词
+            - `videoPrompt`：视频生成提示词
+            - `characters`：该分镜涉及的角色名列表
+
+            **scenePrompt优化要点**：
+            1. **绝对不出现任何人物、人形、人影、手脚**，只有纯环境
+            2. 必须包含：空间布局、材质纹理、光线方向和色温、氛围关键词、天气/时间
+            3. 画风声明：必须与styleDeclaration风格一致
+            4. 示例："现代都市写实风。一间安静的古籍修复室，木质工作台上堆满待修复的泛黄古籍和宣纸，桌面散落毛笔和浆糊碗。午后阳光从左侧木格窗户斜射入内，尘埃在光柱中漂浮，地面铺深色木地板，墙角立着装满古书的樟木书架。静谧、陈旧、温暖的氛围。电影质感，冷色调，细腻光影。无人物。"
+
+            **detailedDescription优化要点**（适配多角色关键帧生成）：
+            1. 不要用"图1中的人物...图2的场景..."这种固定格式
+            2. 先描述整体场景和氛围，再描述每个角色的具体位置、动作、表情、与他人的互动
+            3. 要有画面感和构图意识（如谁在前谁在后、谁左谁右、什么景别）
+            4. 示例："古籍修复室内，午后阳光斜照。林静坐在工作台前的木椅上，低头专注地修补泛黄古籍，白色衬衫袖子挽起，表情认真略带疲惫，手中轻柔翻动书页。张伟站在她身后右侧，双手插在西装裤口袋里，微微侧头注视她，神情若有所思。中景构图，两人一坐一站形成高低错落。现代都市写实风，电影质感。"
+
+            **videoPrompt优化要点**：
+            1. 必须包含视频时长（如"时长5秒"）
+            2. 包含运镜描述（推、拉、摇、移、跟）+节奏（缓慢/快速）
+            3. 角色动态动作描述（不要只写静态画面）
+            4. 示例："时长5秒，镜头从林静手部特写缓慢拉远至中景，展现她专注修补古籍的动作，阳光在她发丝间流动。随后镜头微微右摇，带出身后站立的张伟。背景音乐轻柔，林静低声自语'又错了…'。缓慢节奏，电影质感。"
+
+            ## 拆解规则
+            1. 先梳理剧本内容逻辑，根据场景变化和镜头节奏拆解分镜
+            2. △标记的内容直接对应视觉画面，是分镜拆解的主要依据
+            3. 对话内容决定角色在场和动作表情
+            4. 【空镜】单独作为一个分镜
+            5. 【闪回】内容也要拆解为分镜
+            6. 若某分镜的角色或场景与前一个完全一致，可在scenePrompt和characterPrompt中简写（但JSON结构仍保留characters列表）
+            7. 分镜按顺序编号：分镜1、分镜2……
+
+            ## 输出JSON格式示例
+
+            ```json
+            {
+              "styleDeclaration": "全局视觉风格声明",
               "characters": [
                 {
                   "name": "角色名",
-                  "description": "角色简短描述",
-                  "characterPrompt": "完整的角色多视图合图提示词（四视图+白底）"
+                  "description": "简短描述",
+                  "characterPrompt": "完整的角色设定图prompt，包含四视图构图"
                 }
               ],
               "storyboards": [
                 {
-                  "description": "分镜简短描述（角色+动作+台词）",
-                  "scenePrompt": "场景图生成提示词（仅场景）",
-                  "detailedDescription": "关键帧生成提示词（引用角色图与场景图，描述动作、构图）",
-                  "videoPrompt": "视频生成提示词（包含时长、运镜、描述）",
+                  "description": "[角色]在[场景]做[动作]，说[台词]",
+                  "scenePrompt": "纯场景描述，无人物，遵循风格声明",
+                  "detailedDescription": "关键帧图生图prompt，描述角色在场景中的具体状态",
+                  "videoPrompt": "时长+运镜+动态描述+音效",
                   "characters": ["角色名1", "角色名2"]
                 }
               ]
             }
-            请严格按照上述要求，将用户提供的单集内容拆解为JSON。确保所有提示词精准、无冗余，风格统一。
-            用户提供的单集内容如下：
+            ```
+
+            请严格按照上述规范，将用户提供的单集剧本拆解为精确的JSON数据。用户提供的单集内容如下：
             """ + userScript;
 
-        // 构建消息列表（将系统指令作为 system 角色）
         List<Map<String, Object>> fullMessages = new ArrayList<>();
         Map<String, Object> systemMsg = new HashMap<>();
         systemMsg.put("role", "system");
-        systemMsg.put("content",systemInstruction);
+        systemMsg.put("content", systemInstruction);
         fullMessages.add(systemMsg);
 
-        // 添加用户消息（简单确认）
         Map<String, Object> userMsg = new HashMap<>();
         userMsg.put("role", "user");
         userMsg.put("content", "请拆解以上剧本。");
         fullMessages.add(userMsg);
 
-        // 2.构建请求体
-        Map<String,Object> requestBody = new HashMap<>();
+        Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", "deepseek-chat");
         requestBody.put("messages", fullMessages);
-        requestBody.put("max_tokens",8192); // DeepSeek 支持的最大值
+        requestBody.put("max_tokens", 8192);
 
-        // 3. 设置请求头
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Bearer " + deepseekApiKey);
         HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(requestBody, headers);
 
-        // 4. 发送请求
         try {
             ResponseEntity<String> response = restTemplate.exchange(
                     deepseekApiUrl,
@@ -225,17 +340,14 @@ public class AIService {
                     httpEntity,
                     String.class
             );
-            System.out.println("DeepSeek拆解响应: " + response.getBody());
+            logger.debug("DeepSeek拆解响应: {}", response.getBody());
 
-            // 5. 解析响应，提取 AI 生成的文本 content
             JsonNode root = objectMapper.readTree(response.getBody());
             String content = root.path("choices").get(0).path("message").path("content").asText();
 
-            // 清理 Markdown
             String cleaned = content.replaceFirst("^```json\\s*\\n?", "")
                     .replaceFirst("\\n?```$", "")
                     .trim();
-            // 如果清理后还是以 { 开头，说明可能有效；否则尝试取第一个 { 到最后一个 }
             if (!cleaned.startsWith("{")) {
                 int start = cleaned.indexOf('{');
                 int end = cleaned.lastIndexOf('}');
@@ -245,136 +357,130 @@ public class AIService {
             }
             return cleaned;
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("调用DeepSeek拆解剧本失败", e);
             throw new RuntimeException("调用DeepSeek拆解剧本失败: " + e.getMessage(), e);
         }
     }
 
-
-
     /**
      * 调用阿里云多模态模型生成图片
-     * @param prompt 文本提示词（必需）
+     * @param prompt    文本提示词
      * @param imageUrls 参考图片URL列表（可选，用于图文融合）
      * @return 生成的图片URL
      */
-    public String generateImageFromMultimodal(String prompt, List<String> imageUrls){
-        if (testMode){
+    public String generateImage(String prompt, List<String> imageUrls) {
+        if (testMode) {
             return "https://example.com/test-image.jpg";
         }
-        // 1.构建请求体
-        Map<String , Object> requestBody = new HashMap<>();
-        requestBody.put("model","qwen-image-2.0-2026-03-03");
 
-        // 构建 input.messages
-        Map<String,Object> input = new HashMap<>();     // 输入的基本信息。
-        List<Map<String,Object>> messages = new ArrayList<>();   // 请求内容数组。当前仅支持单轮对话，数组内有且只有一个元素。
-        Map<String ,Object> userMessage = new HashMap<>();
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", "qwen-image-2.0-2026-03-03");
+
+        Map<String, Object> input = new HashMap<>();
+        List<Map<String, Object>> messages = new ArrayList<>();
+        Map<String, Object> userMessage = new HashMap<>();
         userMessage.put("role", "user");
 
         List<Object> contentList = new ArrayList<>();
 
-        // 如果有参考图片，先添加图片,如果 imageUrls 非空，则构建图文混合输入（用于关键帧）；否则只发送文本（用于角色/场景）。
-        if (imageUrls != null && !imageUrls.isEmpty()){
-            for (String url : imageUrls){
-                Map<String ,String > imageContent = new HashMap<>();
-                imageContent.put("image",url);
+        if (imageUrls != null && !imageUrls.isEmpty()) {
+            for (String url : imageUrls) {
+                Map<String, String> imageContent = new HashMap<>();
+                imageContent.put("image", url);
                 contentList.add(imageContent);
             }
         }
 
-        // 添加文本提示词
-        Map<String,String> textContent = new HashMap<>();
-        textContent.put("text",prompt);
+        Map<String, String> textContent = new HashMap<>();
+        textContent.put("text", prompt);
         contentList.add(textContent);
-        userMessage.put("content",contentList);
+        userMessage.put("content", contentList);
         messages.add(userMessage);
-        input.put("messages",messages);
-        requestBody.put("input",input);
+        input.put("messages", messages);
+        requestBody.put("input", input);
 
-        // 构建 parameters 图像处理参数。
-        Map<String,Object>parameters = new HashMap<>();
-        parameters.put("n" , 1);    // 输出图像的数量，默认值为1。对于qwen-image-2.0系列模型，可选择输出1-6张图片。
-        parameters.put("negative_prompt", " ");     // 反向提示词
-        parameters.put("prompt_extend", true);      // 是否开启 Prompt（提示词）智能改写功能。
-        parameters.put("watermark", false);         // 是否在图像右下角添加 "Qwen-Image" 水印
-        parameters.put("size", "2688*1536");    //  512*512至2048*2048之间 2688*1536 ：16:9，1536*2688 ：9:16，2048*2048（默认值）：1:1
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("n", 1);
+        parameters.put("negative_prompt", " ");
+        parameters.put("prompt_extend", true);
+        parameters.put("watermark", false);
+        parameters.put("size", "2688*1536");
         requestBody.put("parameters", parameters);
 
-        // 2. 设置请求头
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Bearer " + aliyunApiKey);
-        HttpEntity<Map<String,Object>>httpEntity = new HttpEntity<>(requestBody,headers);
+        HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(requestBody, headers);
 
-        // 3. 发送请求
         try {
             ResponseEntity<String> response = restTemplate.exchange(
-                    aliyunMultiModalUrl,
+                    aliyunImageApiUrl,
                     HttpMethod.POST,
                     httpEntity,
                     String.class
             );
-            System.out.println("生成图片AI原始响应："+ response.getBody());
+            logger.debug("生成图片AI原始响应：{}", response.getBody());
 
-            // 4. 解析响应，提取生成的图片URL
             JsonNode root = objectMapper.readTree(response.getBody());
             JsonNode contentNode = root.path("output")
-                                  .path("choices").get(0)
-                                  .path("message")
-                                  .path("content").get(0);
-            if (contentNode == null || contentNode.isMissingNode()){
+                    .path("choices").get(0)
+                    .path("message")
+                    .path("content").get(0);
+            if (contentNode == null || contentNode.isMissingNode()) {
                 throw new RuntimeException("响应中缺少 content节点");
             }
-            String imageUrl =contentNode.path("image").asText();
-            if (imageUrl == null || imageUrl.isEmpty()){
+            String imageUrl = contentNode.path("image").asText();
+            if (imageUrl == null || imageUrl.isEmpty()) {
                 throw new RuntimeException("响应中缺少 image字段");
             }
             return imageUrl;
-        }catch (Exception e){
-            e.printStackTrace();
-            throw new RuntimeException("调用生成图片AI失败"+ e.getMessage(),e);
+        } catch (Exception e) {
+            logger.error("调用生成图片AI失败", e);
+            throw new RuntimeException("调用生成图片AI失败" + e.getMessage(), e);
         }
     }
 
     /**
      * 调用阿里云AI视频生成接口，创建异步任务
-     * @param imageUrl 关键帧图片URL
-     * @param prompt 文字提示（可选，文档说image_url和prompt不能同时为空，所以如果传了image_url，prompt可为空）
-     * @return 返回的任务对象（包含taskId等）
+     * 模型：wan2.7-r2v
      */
-    public Map<String,String> createVideoGenerationTask(String imageUrl,String prompt) {
-        if (testMode){
-            Map<String,String> result = new HashMap<>();
+    public Map<String, String> createVideoGenerationTask(String imageUrl, String prompt) {
+        if (testMode) {
+            Map<String, String> result = new HashMap<>();
             result.put("taskId", "test-task-id");
             result.put("status", "SUCCEEDED");
             return result;
         }
-        // 1. 构建请求体
+
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", "wan2.6-r2v-flash");
+        requestBody.put("model", "wan2.7-r2v");
         Map<String, Object> input = new HashMap<>();
         input.put("prompt", prompt != null ? prompt : "");
-        List<String> referenceUrls = new ArrayList<>();
+
+        // media数组：支持reference_image/first_frame等多种类型
+        List<Map<String, String>> mediaList = new ArrayList<>();
         if (imageUrl != null && !imageUrl.isEmpty()) {
-            referenceUrls.add(imageUrl);
+            Map<String, String> media = new HashMap<>();
+            media.put("type", "reference_image");
+            media.put("url", imageUrl);
+            mediaList.add(media);
         }
-        input.put("reference_urls", referenceUrls);
+        input.put("media", mediaList);
         requestBody.put("input", input);
 
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put("size", "1280*720");
-        parameters.put("shot_type", "multi"); // 多镜头
+        parameters.put("resolution", "720P");
+        parameters.put("duration", 5);
+        parameters.put("prompt_extend", false);
+        parameters.put("watermark", false);
         requestBody.put("parameters", parameters);
 
-        // 2. 设置请求头
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Bearer " + videoApiKey);
-        headers.set("X-DashScope-Async", "enable");  // 异步任务标识
+        headers.set("X-DashScope-Async", "enable");
         HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(requestBody, headers);
 
-        // 3. 发送请求
         try {
             ResponseEntity<String> response = restTemplate.exchange(
                     videoApiUrl,
@@ -382,34 +488,31 @@ public class AIService {
                     httpEntity,
                     String.class
             );
-            System.out.println("视频生成AI任务响应: " + response.getBody());
+            logger.debug("视频生成AI任务响应: {}", response.getBody());
 
-            // 4. 解析响应，提取task_id
             JsonNode root = objectMapper.readTree(response.getBody());
-            String taskId = root.path("output").path("task_id").asText();   //生成的任务ID，调用请求结果接口时使用此ID。
+            String taskId = root.path("output").path("task_id").asText();
             String taskStatus = root.path("output").path("task_status").asText();
             Map<String, String> result = new HashMap<>();
             result.put("taskId", taskId);
             result.put("status", taskStatus);
             return result;
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("创建视频生成任务失败", e);
             throw new RuntimeException("创建视频生成任务失败" + e.getMessage(), e);
         }
     }
 
     /**
      * 查询视频生成任务的结果
-     * @param taskId 任务ID
-     * @return 任务状态和结果（如果成功，包含视频URL）
      */
-    public Map<String,Object> queryVideoTaskResult(String taskId){
-        String url = videoResultUrl.replace("{task_id}",taskId);
+    public Map<String, Object> queryVideoTaskResult(String taskId) {
+        String url = videoResultUrl.replace("{task_id}", taskId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + videoApiKey);
-
         HttpEntity<String> httpEntity = new HttpEntity<>(headers);
+
         try {
             ResponseEntity<String> response = restTemplate.exchange(
                     url,
@@ -417,24 +520,20 @@ public class AIService {
                     httpEntity,
                     String.class
             );
-            System.out.println("视频生成AI任务查询响应: " + response.getBody());
+            logger.debug("视频生成AI任务查询响应: {}", response.getBody());
 
-            // 解析响应
             JsonNode root = objectMapper.readTree(response.getBody());
             JsonNode output = root.path("output");
-            // PENDING（排队中）→ RUNNING（处理中）→ SUCCEEDED（成功）/ FAILED（失败）
             String taskStatus = output.path("task_status").asText();
 
             Map<String, Object> result = new HashMap<>();
             result.put("status", taskStatus);
 
             if ("SUCCEEDED".equals(taskStatus)) {
-                // 如果成功，提取视频URL。
                 String videoUrl = output.path("video_url").asText();
                 if (videoUrl != null && !videoUrl.isEmpty()) {
                     result.put("videoUrl", videoUrl);
                 } else {
-                    // 兼容可能有其他结构的情况
                     JsonNode results = output.path("results");
                     if (results.isArray() && results.size() > 0) {
                         videoUrl = results.get(0).path("video_url").asText();
@@ -448,11 +547,8 @@ public class AIService {
 
             return result;
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("查询视频任务失败", e);
             throw new RuntimeException("查询视频任务失败：" + e.getMessage(), e);
         }
     }
-
-
-
 }

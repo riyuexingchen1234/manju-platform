@@ -32,5 +32,4 @@ public class CorsConfig implements WebMvcConfigurer {
         // 5. 预检请求缓存时间：单位秒，3600表示1小时内同一请求不再发送预检请求（OPTIONS），提高性能
                 .maxAge(3600);
     }
-
 }

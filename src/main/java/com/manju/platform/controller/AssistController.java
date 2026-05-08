@@ -5,6 +5,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 
+/**
+ * 辅助工具控制器
+ * 提供小说搜索、排行榜、作品分析等辅助功能接口
+ */
 @RestController
 @RequestMapping("/api/assist")
 public class AssistController {
@@ -13,7 +17,6 @@ public class AssistController {
      */
     @GetMapping("/novel/search")
     public Result searchNovel(@RequestParam String keyword) {
-        // 模拟数据（根据关键词简单过滤）
         List<Map<String, String>> results = new ArrayList<>();
         if (keyword.contains("修仙") || keyword.contains("仙侠")) {
             results.add(Map.of("title", "凡人修仙传", "author", "忘语", "intro", "凡人逆袭修仙"));
@@ -22,7 +25,6 @@ public class AssistController {
             results.add(Map.of("title", "庆余年", "author", "猫腻", "intro", "穿越古代权谋"));
             results.add(Map.of("title", "赘婿", "author", "愤怒的香蕉", "intro", "赘婿逆袭"));
         }
-        // 默认返回几条示例
         results.add(Map.of("title", "吞噬星空", "author", "我吃西红柿", "intro", "科幻修仙"));
         results.add(Map.of("title", "斗破苍穹", "author", "天蚕土豆", "intro", "少年逆袭"));
         return Result.success("搜索成功", results);

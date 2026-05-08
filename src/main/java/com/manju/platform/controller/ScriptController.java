@@ -1,15 +1,18 @@
 package com.manju.platform.controller;
 
+import com.manju.platform.common.Constants;
 import com.manju.platform.common.Result;
-
-import com.manju.platform.dto.ScriptGenerateResponse;
 import com.manju.platform.dto.ScriptGenerateRequest;
+import com.manju.platform.dto.ScriptGenerateResponse;
 import com.manju.platform.service.AIService;
+import com.manju.platform.service.GuestTrialService;
+import com.manju.platform.service.HistoryService;
 import com.manju.platform.service.ScriptService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpSession;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,17 +26,31 @@ public class ScriptController {
     private ScriptService scriptService;
     @Autowired
     private AIService aiService;
+    @Autowired
+    private HistoryService historyService;
+    @Autowired
+    private GuestTrialService guestTrialService;
+
+    // 提取用户输入的第一条消息内容作为 input_preview
+    private String extractInputPreview(List<Map<String, String>> messages) {
+        if (messages != null && !messages.isEmpty()) {
+            String content = messages.get(0).get("content");
+            if (content != null) {
+                return content.length() > 50 ? content.substring(0, 50) + "..." : content;
+            }
+        }
+        return "";
+    }
 
     @PostMapping("/generate")
-    public Result generateScript(@RequestBody ScriptGenerateRequest request,HttpSession session) {
-        // 1. 从 Session 中获取用户ID（登录时已存入）
+    public Result generateScript(@RequestBody ScriptGenerateRequest request, HttpSession session) {
         Integer userId = (Integer) session.getAttribute("userId");
-        List<Map<String, String>> messages;
+
         // 构建消息列表
+        List<Map<String, String>> messages;
         if (request.getMessages() != null && !request.getMessages().isEmpty()) {
             messages = request.getMessages();
         } else if (request.getPrompt() != null) {
-            // 兼容单轮
             messages = new ArrayList<>();
             Map<String, String> userMsg = new HashMap<>();
             userMsg.put("role", "user");
@@ -43,31 +60,22 @@ public class ScriptController {
             return Result.fail("请求参数错误");
         }
 
-        // 2. 未登录用户试用处理
-        if (userId == null){
-            // 获取或创建试用记录 Map
-            Map<String,Boolean>trialMap = (Map<String, Boolean>) session.getAttribute("trialMap");
-            if (trialMap == null){
-                trialMap = new HashMap<>();
-            }
-            // 检查是否已试用过剧本生成
-            if (trialMap.containsKey("script_generate")){
-                return Result.fail("您已试用过剧本生成，请登录后使用");
-            }
-            // 记录试用
-            trialMap.put("script_generate",true);
-            session.setAttribute("trialMap",trialMap);
-
-            // 未登录试用直接调用 AI（不扣积分）
-            String aiResult = aiService.generateScript(messages);
-            return Result.success("试用成功",aiResult);
+        // 未登录用户试用
+        if (userId == null) {
+            String aiResult = guestTrialService.execute(session,
+                    Constants.TOOL_SCRIPT_GENERATE, Constants.DISPLAY_SCRIPT_GENERATE,
+                    () -> aiService.generateScript(messages));
+            historyService.save(null, session, Constants.TOOL_SCRIPT_GENERATE,
+                    extractInputPreview(messages), "text",
+                    aiResult, null, "success", null);
+            return Result.success("试用成功", aiResult);
         }
 
-
-        // 3. 已登录用户：正常调用 Service（积分、日志由 PaymentService 处理）
+        // 已登录用户：正常调用 Service（积分、日志由 PaymentService 处理）
         ScriptGenerateResponse response = scriptService.generateScript(userId, messages);
+        historyService.save(userId, session, Constants.TOOL_SCRIPT_GENERATE,
+                extractInputPreview(messages), "text",
+                response.getScript(), null, "success", null);
         return Result.success("剧本生成成功", response);
-
     }
-
 }

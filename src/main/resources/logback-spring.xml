@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Logback Spring 日志配置文件
+    使用说明：Spring Boot 默认会加载 src/main/resources/logback-spring.xml
+    会在控制台同时输出彩色日志，并写入 logs/app.log 文件
+    -->
+<configuration>
+    <!-- 日志文件存储路径 -->
+    <property name="LOG_PATH" value="${LOG_PATH:-logs}"/>
+    <!-- 日志文件名称前缀 -->
+    <property name="LOG_FILE_NAME" value="app"/>
+
+    <!-- 彩色控制台输出：开发环境 -->
+    <!-- 生产环境建议去掉 color，改为普通 %msg 输出 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %highlight(%-5level) [%thread] %cyan(%logger{36}) - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 文件输出：带滚动切割 -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- 当前日志文件 -->
+        <file>${LOG_PATH}/${LOG_FILE_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- 滚动文件名格式：按天分割 -->
+            <fileNamePattern>${LOG_PATH}/${LOG_FILE_NAME}.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- 保留30天历史日志 -->
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 根日志级别：INFO -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+    <!-- 开发调试：com.manju 包下用 DEBUG -->
+    <!-- 如果是生产环境，建议调为 INFO 或 WARN -->
+    <logger name="com.manju" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- Spring 框架默认只输出 WARN 以上 -->
+    <logger name="org.springframework" level="WARN"/>
+
+    <!-- 减少 Hibernate / JDBC 噪音 -->
+    <logger name="org.hibernate" level="WARN"/>
+</configuration>

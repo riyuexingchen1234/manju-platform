@@ -5,4 +5,5 @@ import lombok.Data;
 public class CharacterGenerateRequest {
     private String characterName;
     private String characterPrompt;     // 从拆解接口获得的完整提示词
+    private String styleDeclaration;    // 全局风格声明
 }

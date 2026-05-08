@@ -4,5 +4,5 @@ import lombok.Data;
 
 @Data
 public class ScriptGenerateResponse {
-    private String content;
+    private String script;
 }

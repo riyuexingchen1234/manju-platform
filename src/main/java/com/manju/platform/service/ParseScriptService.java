@@ -1,36 +1,37 @@
 package com.manju.platform.service;
 
-import com.manju.platform.common.Constants;
-import com.manju.platform.dto.ParseScriptResponse;
+import com.manju.platform.dto.ScriptParseResponse;
 import com.manju.platform.exception.BusinessException;
-import com.manju.platform.functional.AICallable;
+import com.manju.platform.common.Constants;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
-public class ParseService {
+public class ParseScriptService {
+    private static final Logger logger = LoggerFactory.getLogger(ParseScriptService.class);
     @Autowired
     private PaymentService paymentService;
     @Autowired
-    private AIService aiService;        // 注入 AI 服务，用于真实调用
+    private AIService aiService;
     @Autowired
-    private ObjectMapper objectMapper;  // 用于解析 JSON
-
+    private ObjectMapper objectMapper;
 
     /**
      * 拆解剧本
      */
-    public ParseScriptResponse parseScript(int userId, String userScript) {
-        Object result = paymentService.processPayment(
+    public ScriptParseResponse parseScript(int userId, String userScript) {
+        return paymentService.processPayment(
                 userId,
                 Constants.TOOL_PARSE_SCRIPT,
                 Constants.POINTS_PARSE_SCRIPT,
                 () -> {
                     // 调用 AI 拆解剧本，获取原始 JSON 字符串
                     String rawJson = aiService.parseScript(userScript);
-                    System.out.println("原始 rawJson: " + rawJson);  // 打印原始内容
-                    // 检查 JSON 是否以 } 结尾（快速判断）
+                    logger.debug("原始 rawJson: {}", rawJson);
+                    // 检查 JSON 是否以 } 结尾
                     String trimmed = rawJson.trim();
                     if (!trimmed.endsWith("}")) {
                         throw new BusinessException("AI 生成的拆解结果不完整，请尝试缩短剧本或重新拆解");
@@ -39,9 +40,12 @@ public class ParseService {
                     int start = rawJson.indexOf('{');
                     int end = rawJson.lastIndexOf('}');
                     String cleanedJson = rawJson.substring(start, end + 1);
-                    return objectMapper.readValue(cleanedJson, ParseScriptResponse.class);
+                    try {
+                        return objectMapper.readValue(cleanedJson, ScriptParseResponse.class);
+                    } catch (Exception e) {
+                        throw new RuntimeException("拆解结果 JSON 解析失败", e);
+                    }
                 }
         );
-        return (ParseScriptResponse) result;
     }
 }

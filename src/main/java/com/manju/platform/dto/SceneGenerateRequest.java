@@ -5,4 +5,5 @@ import lombok.Data;
 @Data
 public class SceneGenerateRequest {
     private String scenePrompt;
+    private String styleDeclaration;    // 全局风格声明
 }

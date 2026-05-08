@@ -1,9 +1,11 @@
 package com.manju.platform.dto;
 import lombok.Data;
 import java.util.List;
+
 //  拆解响应
 @Data
-public class ParseScriptResponse {
+public class ScriptParseResponse {
+    private String styleDeclaration;          // 全局视觉风格声明
     private List<CharacterInfo> characters;
     private List<StoryboardInfo> storyboards;
 
