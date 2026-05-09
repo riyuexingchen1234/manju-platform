@@ -22,7 +22,7 @@ public class PaymentService {
 
     /**
      * 处理工具调用的支付逻辑（同步AI：先扣后调，失败退还）
-     * 适用于：剧本生成、角色生成、场景生成、关键帧生成
+     * 适用于：剧本生成、角色生成、场景生成、关键帧生成、视频生成
      */
     @Transactional(rollbackFor = Exception.class)
     public <T> T processPayment(int userId, String toolName, int pointsCost, AICallable<T> aiCall) {
@@ -88,51 +88,6 @@ public class PaymentService {
             recordFailLog(userId, toolName, "AI调用失败：" + e.getMessage());
             throw e;
         }
-    }
-
-    /**
-     * 延迟扣费（异步AI：视频成功后调用）
-     * 适用于：视频生成
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void deferredProcessPayment(int userId, String toolName, int pointsCost) {
-        // 1. 检查是否可免费
-        try {
-            UsageLog freeLog = new UsageLog();
-            freeLog.setUserId(userId);
-            freeLog.setToolName(toolName);
-            freeLog.setIsFree(1);
-            freeLog.setPointsDeduct(0);
-            freeLog.setCallStatus(0);
-            freeLog.setFailReason(null);
-            logDao.insertAndReturnId(freeLog);
-            // 免费成功，直接返回
-            return;
-        } catch (DuplicateKeyException e) {
-            // 今日已有免费记录，走付费流程
-        }
-
-        // 2. 付费流程：查积分→扣积分→记录日志
-        User user = userDao.findById(userId);
-        if (user == null) {
-            throw new BusinessException("用户不存在");
-        }
-        if (user.getPoints() < pointsCost) {
-            throw new BusinessException("积分不足");
-        }
-        boolean updated = userDao.updatePointsWithVersion(userId, user.getPoints() - pointsCost, user.getVersion());
-        if (!updated) {
-            throw new BusinessException("积分扣费失败，请重试");
-        }
-        // 记录付费日志
-        UsageLog paidLog = new UsageLog();
-        paidLog.setUserId(userId);
-        paidLog.setToolName(toolName);
-        paidLog.setIsFree(0);
-        paidLog.setPointsDeduct(pointsCost);
-        paidLog.setCallStatus(1);
-        paidLog.setFailReason(null);
-        logDao.insertAndReturnId(paidLog);
     }
 
     // 独立事务记录失败日志（使用 REQUIRES_NEW 并降低隔离级别，避免锁等待）

@@ -45,9 +45,13 @@ public class UserController {
         return Result.fail("用户名或密码错误");
     }
 
-    @GetMapping("/{id}/points")
-    public Result getPoints(@PathVariable int id) {
-        User user = userDao.findById(id);
+    @GetMapping("/points")
+    public Result getPoints(HttpSession session) {
+        Integer userId = (Integer) session.getAttribute("userId");
+        if (userId == null) {
+            return Result.fail("请先登录");
+        }
+        User user = userDao.findById(userId);
         if (user == null) {
             return Result.fail("用户不存在");
         }

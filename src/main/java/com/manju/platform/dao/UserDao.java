@@ -64,12 +64,6 @@ public class UserDao {
         }
     }
 
-    public boolean updatePoints(int userId, int newPoints) {
-        String sql = "UPDATE user SET points = ? WHERE id = ?";
-        int rows = jdbcTemplate.update(sql, newPoints, userId);
-        return rows > 0;
-    }
-
     public boolean updatePointsWithVersion(int userId, int newPoints, int currentVersion) {
         String sql = "UPDATE user SET points = ?, version = version + 1 WHERE id = ? AND version = ?";
         int rows = jdbcTemplate.update(sql, newPoints, userId, currentVersion);
