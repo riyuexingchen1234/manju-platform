@@ -8,10 +8,10 @@ import java.time.LocalDateTime;
 public class UsageLog {
     private int id;
     private int userId;
-    private String toolName;
+    private String tool;
     private LocalDateTime useDate;
     private int isFree;
-    private int pointsDeduct;
+    private int pointsCost;
     private int callStatus;
     private String failReason;
 }

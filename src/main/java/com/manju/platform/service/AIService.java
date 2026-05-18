@@ -71,7 +71,7 @@ public class AIService {
 
             【工作流程】
 
-            **第一步：输出梗概 + 角色表**
+            第一步：输出梗概 + 角色表
             - 若用户提供信息不足（如只说"帮我写个短剧"），主动追问1-2轮补充：题材/爽点/人设偏好
             - 若用户提供信息已足够，直接输出
             - 输出内容：
@@ -85,13 +85,13 @@ public class AIService {
               3. 预计集数和题材标签
             - 询问用户是否满意，满意则进入第二步
 
-            **第二步：输出完整大纲**
+            第二步：输出完整大纲
             - 每10集一个章节梗概
             - 明确标注付费卡点位置（通常第10-15集第一个卡点）
             - 标注核心爽点位置
             - 询问用户是否满意，满意则进入第三步
 
-            **第三步：逐集输出剧本**
+            第三步：逐集输出剧本
             - 严格按短剧格式输出（详见下方规范）
             - 每次输出一集，用户确认满意后输出下一集
             - 用户不满意则修改当前集，满意后继续
@@ -470,7 +470,7 @@ public class AIService {
 
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("resolution", "720P");
-        parameters.put("duration", 5);
+        parameters.put("duration", 4);
         parameters.put("prompt_extend", false);
         parameters.put("watermark", false);
         requestBody.put("parameters", parameters);

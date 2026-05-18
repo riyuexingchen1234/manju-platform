@@ -31,12 +31,12 @@ public class ScriptController {
     @Autowired
     private GuestTrialService guestTrialService;
 
-    // 提取用户输入的第一条消息内容作为 input_preview
+    // 提取用户输入的第一条消息内容作为 input_preview（取前10字）
     private String extractInputPreview(List<Map<String, String>> messages) {
         if (messages != null && !messages.isEmpty()) {
             String content = messages.get(0).get("content");
             if (content != null) {
-                return content.length() > 50 ? content.substring(0, 50) + "..." : content;
+                return content.length() > 10 ? content.substring(0, 10) + "..." : content;
             }
         }
         return "";
@@ -66,7 +66,7 @@ public class ScriptController {
                     Constants.TOOL_SCRIPT_GENERATE, Constants.DISPLAY_SCRIPT_GENERATE,
                     () -> aiService.generateScript(messages));
             historyService.save(null, session, Constants.TOOL_SCRIPT_GENERATE,
-                    extractInputPreview(messages), "text",
+                    extractInputPreview(messages),
                     aiResult, null, "success", null);
             return Result.success("试用成功", aiResult);
         }
@@ -74,7 +74,7 @@ public class ScriptController {
         // 已登录用户：正常调用 Service（积分、日志由 PaymentService 处理）
         ScriptGenerateResponse response = scriptService.generateScript(userId, messages);
         historyService.save(userId, session, Constants.TOOL_SCRIPT_GENERATE,
-                extractInputPreview(messages), "text",
+                extractInputPreview(messages),
                 response.getScript(), null, "success", null);
         return Result.success("剧本生成成功", response);
     }

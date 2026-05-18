@@ -24,14 +24,14 @@ public class UsageLogDao {
      * 返回 true 表示插入成功，false 表示唯一约束冲突（今日已免费）
      */
     public int insertAndReturnId(UsageLog log) {
-        String sql = "INSERT INTO usage_log (user_id,tool_name,is_free,points_deduct,call_status,fail_reason) VALUES (?,?,?,?,?,?)";
+        String sql = "INSERT INTO usage_log (user_id,tool,is_free,points_cost,call_status,fail_reason) VALUES (?,?,?,?,?,?)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setInt(1, log.getUserId());
-            ps.setString(2, log.getToolName());
+            ps.setString(2, log.getTool());
             ps.setInt(3, log.getIsFree());
-            ps.setInt(4, log.getPointsDeduct());
+            ps.setInt(4, log.getPointsCost());
             ps.setInt(5, log.getCallStatus());
             ps.setString(6, log.getFailReason());
             return ps;

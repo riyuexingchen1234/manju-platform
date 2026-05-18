@@ -32,9 +32,9 @@ public class PaymentService {
             // 只有第一次插入能成功；如果抛 DuplicateKeyException，说明今日已经免费过了
             UsageLog freeLog = new UsageLog();
             freeLog.setUserId(userId);
-            freeLog.setToolName(toolName);
+            freeLog.setTool(toolName);
             freeLog.setIsFree(1);
-            freeLog.setPointsDeduct(0);
+            freeLog.setPointsCost(0);
             freeLog.setCallStatus(0);
             freeLog.setFailReason(null);
             int logId = logDao.insertAndReturnId(freeLog);
@@ -74,9 +74,9 @@ public class PaymentService {
             // 5. AI调用成功，记录付费日志
             UsageLog successLog = new UsageLog();
             successLog.setUserId(userId);
-            successLog.setToolName(toolName);
+            successLog.setTool(toolName);
             successLog.setIsFree(0);
-            successLog.setPointsDeduct(pointsCost);
+            successLog.setPointsCost(pointsCost);
             successLog.setCallStatus(1);
             successLog.setFailReason(null);
             logDao.insertAndReturnId(successLog);
@@ -95,9 +95,9 @@ public class PaymentService {
     public void recordFailLog(int userId, String toolName, String reason) {
         UsageLog failLog = new UsageLog();
         failLog.setUserId(userId);
-        failLog.setToolName(toolName);
+        failLog.setTool(toolName);
         failLog.setIsFree(0);
-        failLog.setPointsDeduct(0);
+        failLog.setPointsCost(0);
         failLog.setCallStatus(0);
         failLog.setFailReason(reason);
         logDao.insertAndReturnId(failLog);

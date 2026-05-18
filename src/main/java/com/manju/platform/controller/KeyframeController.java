@@ -30,7 +30,7 @@ public class KeyframeController {
     // 提取分镜描述前50字作为 input_preview
     private String extractInputPreview(String description) {
         if (description != null) {
-            return description.length() > 50 ? description.substring(0, 50) + "..." : description;
+            return description.length() > 10 ? description.substring(0, 10) + "..." : description;
         }
         return "";
     }
@@ -86,7 +86,7 @@ public class KeyframeController {
                     });
             historyService.save(null, session, Constants.TOOL_KEYFRAME_GENERATE,
                     extractInputPreview(request.getStoryboardDescription()),
-                    "image_url", null, response.getImageUrl(), "success", null);
+                    null, response.getImageUrl(), "success", null);
             return Result.success("试用成功", response);
         }
 
@@ -94,7 +94,7 @@ public class KeyframeController {
         KeyframeGenerateResponse response = keyframeService.generateKeyframe(userId, request);
         historyService.save(userId, session, Constants.TOOL_KEYFRAME_GENERATE,
                 extractInputPreview(request.getStoryboardDescription()),
-                "image_url", null, response.getImageUrl(), "success", null);
+                null, response.getImageUrl(), "success", null);
         return Result.success("关键帧生成成功", response);
     }
 }

@@ -31,10 +31,10 @@ public class VideoController {
     @Autowired
     private GuestTrialService guestTrialService;
 
-    // 提取视频描述前50字作为 input_preview
+    // 提取视频描述前10字作为 input_preview
     private String extractInputPreview(String description) {
         if (description != null) {
-            return description.length() > 50 ? description.substring(0, 50) + "..." : description;
+            return description.length() > 10 ? description.substring(0, 10) + "..." : description;
         }
         return "";
     }
@@ -60,7 +60,7 @@ public class VideoController {
                     });
             historyService.save(null, session, Constants.TOOL_VIDEO_GENERATE,
                     extractInputPreview(request.getDescription()),
-                    "video_url", "视频生成中...", null, "pending", response.getTaskId());
+                    "视频生成中...", null, "pending", response.getTaskId());
             return Result.success("试用成功", response);
         }
 
@@ -68,7 +68,7 @@ public class VideoController {
         VideoGenerateResponse response = videoService.generateVideo(userId, request);
         historyService.save(userId, session, Constants.TOOL_VIDEO_GENERATE,
                 extractInputPreview(request.getDescription()),
-                "video_url", "视频生成中...", null, "pending", response.getTaskId());
+                "视频生成中...", null, "pending", response.getTaskId());
         return Result.success("视频生成成功", response);
     }
 
@@ -80,14 +80,14 @@ public class VideoController {
 
         if ("SUCCEEDED".equals(status)) {
             try {
-                historyService.updateByTaskId(session, taskId, "success",
+                historyService.updateByTaskId(taskId, "success",
                         (String) result.get("videoUrl"), "视频生成成功");
             } catch (Exception e) {
                 logger.error("更新视频历史记录失败: taskId={}", taskId, e);
             }
         } else if ("FAILED".equals(status)) {
             try {
-                historyService.updateByTaskId(session, taskId, "failed", null,
+                historyService.updateByTaskId(taskId, "failed", null,
                         result.get("error") != null ? (String) result.get("error") : "视频生成失败");
             } catch (Exception e) {
                 logger.error("更新视频历史记录失败: taskId={}", taskId, e);

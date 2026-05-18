@@ -1,10 +1,10 @@
 package com.manju.platform.common;
 
 /**
- * 常量类：统一管理工具名称和积分定价
+ * 常量类：统一管理工具类型和积分定价
  */
 public class Constants {
-    // 工具名称（对应 usage_log 表中的 tool_name 字段）
+    // 工具类型（对应 usage_log 表和 user_history 表的 tool 字段）
     public static final String TOOL_SCRIPT_GENERATE = "script_generate";
     public static final String TOOL_PARSE_SCRIPT = "parse_script";
     public static final String TOOL_CHARACTER_GENERATE = "character_generate";

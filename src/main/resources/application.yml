@@ -1,0 +1,67 @@
+# HTTP编码配置
+spring:
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+  # MySQL local
+  datasource:
+    url: jdbc:mysql://localhost:3306/manju_platform?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8
+    username: root
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    # HikariCP连接池配置（Spring Boot默认连接池）
+    # 最大连接数20，最小空闲5，连接超时30秒
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  # Redis local
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+      # password:
+  # Spring Session 存储配置：使用 Redis 作为会话存储
+  session:
+    store-type: redis
+    timeout: 1800s
+    redis:
+      namespace: manju:session
+      cleanup-cron: "0 0 * * * *"  # 每小时清理一次过期会话
+
+# 打印SQL日志（方便调试，JDBC会打印SQL语句和参数）
+logging:
+  level:
+    org.springframework.jdbc.core: DEBUG
+
+# 剧本/拆解 API
+deepseek:
+  api:
+    url: https://api.deepseek.com/chat/completions
+    key: ${TO_TEXT_API_KEY}
+
+# 阿里云多模态生成（角色+场景+关键帧）
+aliyun:
+  api:
+    url: https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
+    key: ${TO_IMAGE_API_KEY}
+
+# 视频生成（角色+场景=视频）
+video:
+  api:
+    url: https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis
+    key: ${TO_VIDEO_API_KEY}
+  result:
+    url: https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}

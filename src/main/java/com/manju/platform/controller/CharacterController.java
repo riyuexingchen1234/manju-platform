@@ -26,10 +26,10 @@ public class CharacterController {
     @Autowired
     private GuestTrialService guestTrialService;
 
-    // 提取角色描述前50字作为 input_preview
+    // 提取角色描述前10字作为 input_preview
     private String extractInputPreview(String prompt) {
         if (prompt != null) {
-            return prompt.length() > 50 ? prompt.substring(0, 50) + "..." : prompt;
+            return prompt.length() > 10 ? prompt.substring(0, 10) + "..." : prompt;
         }
         return "";
     }
@@ -51,7 +51,7 @@ public class CharacterController {
                     ));
             historyService.save(null, session, Constants.TOOL_CHARACTER_GENERATE,
                     extractInputPreview(request.getCharacterPrompt()),
-                    "image_url", null, imageUrl, "success", null);
+                    null, imageUrl, "success", null);
             return Result.success("试用成功", imageUrl);
         }
 
@@ -59,7 +59,7 @@ public class CharacterController {
         CharacterGenerateResponse response = characterService.generateCharacter(userId, request);
         historyService.save(userId, session, Constants.TOOL_CHARACTER_GENERATE,
                 extractInputPreview(request.getCharacterPrompt()),
-                "image_url", null, response.getImageUrl(), "success", null);
+                null, response.getImageUrl(), "success", null);
         return Result.success("角色生成成功", response);
     }
 

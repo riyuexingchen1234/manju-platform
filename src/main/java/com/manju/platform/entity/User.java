@@ -4,7 +4,8 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-public class User {
+public class User implements java.io.Serializable{
+    private static final long serivalVersionUID = 1L;
     private int id;
     private String username;
     private String password;

@@ -3,17 +3,16 @@ package com.manju.platform.controller;
 import com.manju.platform.common.Result;
 import com.manju.platform.dao.HistoryDao;
 import com.manju.platform.entity.UserHistory;
-import com.manju.platform.service.HistoryService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.ArrayList;
 
 /**
  * 历史记录控制器
  * 接口前缀：/api/history
+ * 要求：需登录访问，未登录用户无历史记录入口
  */
 @RestController
 @RequestMapping("/api/history")
@@ -21,8 +20,6 @@ public class HistoryController {
 
     @Autowired
     private HistoryDao historyDao;
-    @Autowired
-    private HistoryService historyService;
 
     /**
      * 获取最近N条历史记录（用于悬停卡片）
@@ -32,12 +29,7 @@ public class HistoryController {
                                    HttpSession session) {
         Integer userId = (Integer) session.getAttribute("userId");
         if (userId == null) {
-            List<UserHistory> guestList = historyService.getGuestHistory(session);
-            if (guestList == null || guestList.isEmpty()) {
-                return Result.success("暂无历史记录", new ArrayList<>());
-            }
-            int actualLimit = Math.min(limit, guestList.size());
-            return Result.success("查询成功", guestList.subList(0, actualLimit));
+            return Result.fail("请先登录");
         }
         List<UserHistory> list = historyDao.findRecentByUserId(userId, limit);
         return Result.success("查询成功", list);
@@ -52,19 +44,7 @@ public class HistoryController {
                                  HttpSession session) {
         Integer userId = (Integer) session.getAttribute("userId");
         if (userId == null) {
-            List<UserHistory> guestList = historyService.getGuestHistory(session);
-            if (guestList == null || guestList.isEmpty()) {
-                return Result.success("暂无历史记录", new HistoryListResult(new ArrayList<>(), 0, page, size));
-            }
-
-            int total = guestList.size();
-            int offset = (page - 1) * size;
-            if (offset >= total) {
-                return Result.success("查询成功", new HistoryListResult(new ArrayList<>(), total, page, size));
-            }
-            int end = Math.min(offset + size, total);
-            List<UserHistory> pagedList = guestList.subList(offset, end);
-            return Result.success("查询成功", new HistoryListResult(pagedList, total, page, size));
+            return Result.fail("请先登录");
         }
         int offset = (page - 1) * size;
         List<UserHistory> list = historyDao.findByUserId(userId, offset, size);

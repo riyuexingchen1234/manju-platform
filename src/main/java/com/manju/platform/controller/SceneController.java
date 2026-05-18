@@ -30,7 +30,7 @@ public class SceneController {
     // 提取场景描述前50字作为 input_preview
     private String extractInputPreview(String prompt) {
         if (prompt != null) {
-            return prompt.length() > 50 ? prompt.substring(0, 50) + "..." : prompt;
+            return prompt.length() > 10 ? prompt.substring(0, 10) + "..." : prompt;
         }
         return "";
     }
@@ -54,7 +54,7 @@ public class SceneController {
             response.setImageUrl(imageUrl);
             historyService.save(null, session, Constants.TOOL_SCENE_GENERATE,
                     extractInputPreview(request.getScenePrompt()),
-                    "image_url", null, imageUrl, "success", null);
+                    null, imageUrl, "success", null);
             return Result.success("试用成功", response);
         }
 
@@ -62,7 +62,7 @@ public class SceneController {
         SceneGenerateResponse response = sceneService.generateScene(userId, request);
         historyService.save(userId, session, Constants.TOOL_SCENE_GENERATE,
                 extractInputPreview(request.getScenePrompt()),
-                "image_url", null, response.getImageUrl(), "success", null);
+                null, response.getImageUrl(), "success", null);
         return Result.success("场景生成成功", response);
     }
 
