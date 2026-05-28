@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,9 +18,7 @@ import org.slf4j.LoggerFactory;
 @Component
 public class TrialManager {
     private static final Logger logger = LoggerFactory.getLogger(TrialManager.class);
-
     private static final String KEY_PREFIX = "trial:";
-    private static final Duration EXPIRE_TIME = Duration.ofHours(25); // 比一天略长，过期自动清理
 
     @Autowired
     private StringRedisTemplate redisTemplate;
@@ -46,8 +45,15 @@ public class TrialManager {
      */
     public void recordTrial(HttpSession session, String toolName) {
         String key = buildKey(session.getId(), toolName);
-        redisTemplate.opsForValue().set(key, LocalDate.now().toString(), EXPIRE_TIME);
-        logger.debug("记录试用: sessionId={}, tool={}", session.getId(), toolName);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime endOfDay = now.toLocalDate().atTime(23, 59, 59);
+        long secondsUntilEndOfDay = Duration.between(now, endOfDay).getSeconds();
+        if (secondsUntilEndOfDay <= 0) {
+            secondsUntilEndOfDay = 86400;
+        }
+
+        redisTemplate.opsForValue().set(key, LocalDate.now().toString(), Duration.ofSeconds(secondsUntilEndOfDay));
+        logger.debug("记录试用: sessionId={}, tool={}, 过期剩余{}秒", session.getId(), toolName, secondsUntilEndOfDay);
     }
 
     /**

@@ -35,7 +35,6 @@ public class UserController {
         if (user != null && passwordEncoder.matches(password, user.getPassword())) {
             session.setAttribute("userId", user.getId());
             session.setAttribute("user", user);
-            session.removeAttribute("trialDateMap");
             int mergedCount = historyService.mergeGuestHistoryToUser(session, user.getId());
             if (mergedCount > 0) {
                 logger.debug("已合并 {} 条未登录试用历史到用户 {}", mergedCount, user.getId());

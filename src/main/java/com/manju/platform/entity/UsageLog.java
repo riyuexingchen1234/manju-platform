@@ -2,14 +2,14 @@ package com.manju.platform.entity;
 
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Data
 public class UsageLog {
     private int id;
     private int userId;
     private String tool;
-    private LocalDateTime useDate;
+    private LocalDate useDate;
     private int isFree;
     private int pointsCost;
     private int callStatus;

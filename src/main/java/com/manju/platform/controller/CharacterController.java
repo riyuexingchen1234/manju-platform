@@ -1,6 +1,7 @@
 package com.manju.platform.controller;
 
 import com.manju.platform.common.Constants;
+import com.manju.platform.common.PromptUtils;
 import com.manju.platform.common.Result;
 import com.manju.platform.dto.CharacterGenerateRequest;
 import com.manju.platform.dto.CharacterGenerateResponse;
@@ -39,7 +40,7 @@ public class CharacterController {
         Integer userId = (Integer) session.getAttribute("userId");
 
         // 构建带风格声明的prompt（登录用户和试用用户都需要）
-        String prompt = buildPromptWithStyle(request.getCharacterPrompt(), request.getStyleDeclaration());
+        String prompt = PromptUtils.buildPromptWithStyle(request.getCharacterPrompt(), request.getStyleDeclaration());
 
         // 未登录用户试用
         if (userId == null) {
@@ -61,18 +62,5 @@ public class CharacterController {
                 extractInputPreview(request.getCharacterPrompt()),
                 null, response.getImageUrl(), "success", null);
         return Result.success("角色生成成功", response);
-    }
-
-    /**
-     * 将全局风格声明拼接到用户prompt末尾
-     */
-    private String buildPromptWithStyle(String userPrompt, String styleDeclaration) {
-        if (userPrompt == null) {
-            userPrompt = "";
-        }
-        if (styleDeclaration != null && !styleDeclaration.trim().isEmpty()) {
-            return userPrompt + "\n\n【全局风格声明】" + styleDeclaration;
-        }
-        return userPrompt;
     }
 }

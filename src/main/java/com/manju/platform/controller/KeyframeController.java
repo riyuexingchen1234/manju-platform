@@ -1,6 +1,7 @@
 package com.manju.platform.controller;
 
 import com.manju.platform.common.Constants;
+import com.manju.platform.common.PromptUtils;
 import com.manju.platform.common.Result;
 import com.manju.platform.dto.KeyframeGenerateRequest;
 import com.manju.platform.dto.KeyframeGenerateResponse;
@@ -55,29 +56,7 @@ public class KeyframeController {
 
                         // 构建 prompt
                         int charCount = request.getCharacterImageUrls() != null ? request.getCharacterImageUrls().size() : 0;
-                        String prompt;
-                        if (charCount == 0) {
-                            // 无角色图时，只用场景图
-                            prompt = String.format(
-                                    "请根据以下场景参考图生成关键帧图片：%s。%s",
-                                    request.getSceneImageUrl() != null ? "图1是场景背景参考图" : "",
-                                    request.getStoryboardDescription()
-                            );
-                        } else if (charCount == 1) {
-                            // 单角色
-                            prompt = String.format(
-                                    "请根据以下参考图和描述生成关键帧图片。图1是角色形象参考图，图2是场景背景参考图。请将角色自然地融入场景中，%s",
-                                    request.getStoryboardDescription()
-                            );
-                        } else {
-                            // 多角色
-                            prompt = String.format(
-                                    "请根据以下参考图和描述生成关键帧图片。图1到图%d是角色形象参考图，图%d是场景背景参考图。请将角色自然地融入场景中，%s",
-                                    charCount,
-                                    charCount + 1,
-                                    request.getStoryboardDescription()
-                            );
-                        }
+                        String prompt = PromptUtils.buildKeyframePrompt(request.getStoryboardDescription(), charCount);
 
                         String imageUrl = aiService.generateImage(prompt, imageUrls);
                         KeyframeGenerateResponse resp = new KeyframeGenerateResponse();
