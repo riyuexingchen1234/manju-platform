@@ -59,7 +59,8 @@ public class PaymentService {
         }
         // 2. 检查积分是否足够
         if (user.getPoints() < pointsCost) {
-            recordFailLog(userId, toolName, "积分不足，需要" + pointsCost + "分");
+            // 不注释掉recordFailLog，则不会提示积分不足，会提示系统通用异常
+//            recordFailLog(userId, toolName, "积分不足，需要" + pointsCost + "分");
             throw new BusinessException("积分不足");
         }
         // 3. 预扣积分（乐观锁）

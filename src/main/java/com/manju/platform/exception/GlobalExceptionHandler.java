@@ -14,12 +14,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-
+    //  专门处理业务异常
     @ExceptionHandler(BusinessException.class)
     public Result handleBusinessException(BusinessException e) {
-        return Result.fail(e.getMessage());
+        return Result.fail(e.getMessage());     // 返回用户能看懂的提示信息
     }
-
+    // 处理其他所有系统异常 返回通用提示，不暴露系统内部错误
     @ExceptionHandler(Exception.class)
     public Result handleException(Exception e) {
         logger.error("系统异常", e);
